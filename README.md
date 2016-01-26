@@ -1,3 +1,5 @@
+NOT READY FOR USE: THIS IS A WORK IN PROGRESS!!
+
 A pure Python library for simple sync with Open Science Framework
 
 This package is for simple synchronisation of files from the local file space to the Open Science Framework (OSF). There is a more complex fully-featured sync package by the Center for Open Science,
