@@ -1,11 +1,24 @@
+
+"""Classes and functions to access remote (https://OSF.io) projects
+"""
+
+# License info: the code for Session.authenticate() is derived from the code
+# in https://github.com/CenterForOpenScience/osf-sync/blob/develop/osfoffline/utils/authentication.py
+
+import constants
 import os, time
 import requests
 import json
+import datetime
+
+class AuthError(Exception):
+    """Authentication error while connecting to the OSF"""
+    pass
 
 def find_user(name):
     """Find a user and retrieve their id and attributes
     """
-    reply = requests.get("https://api.osf.io/v2/users/?filter[full_name]=%s" %(name)).json()
+    reply = requests.get(constants.API_BASE+"/users/?filter[full_name]=%s" %(name)).json()
     attributes = reply['data'][0]['attributes']
     userID = reply['data'][0]['id']
     return userID, attributes
@@ -13,7 +26,111 @@ def find_user(name):
 def find_user_projects(userID):
     """Finds all the projects of a given userID
     """
-    return requests.get("https://api.osf.io/v2/users/%s/nodes?filter[category]=project" %userID).json()
+    return requests.get(constants.API_BASE+"/users/%s/nodes?filter[category]=project" %userID).json()
+
+class Session(object):
+    """A class to track a session with the OSF server.
+
+    The session will store a token, which can then be used to authenticate
+    for project read/write access
+    """
+    def __init__(self, username=None, password=None, token=None, otp=None):
+        """Create a session to send requests with the OSF server
+
+        Provide either username and password for authentication with a new
+        token, or provide a token from a previous session, or nothing for an
+        anonymous user
+        """
+        self.username = username
+        self.password = password
+        self.user_id = None #populate when token property is set
+        self.user_full_name = None
+        #create a basic session
+        self._session = requests.Session()
+        #set token (which will update session headers as needed)
+        if token is not None:
+            self.token = token
+        elif username is not None:
+            self.token = self.authenticate(username, password, otp)
+
+    def find_users(self, searchStr):
+        """Find user IDs whose name matches a given search string
+        """
+        reply = self._session.get(constants.API_BASE+"/users/?filter[full_name]=%s"\
+            %(searchStr)).json()
+        attributes = reply['data'][0]['attributes']
+        userID = reply['data'][0]['id']
+        return userID, attributes
+
+    def find_my_projects(self, searchStr):
+        """Find project IDs matching a given search string, that the
+        current authenticaed user/session can access
+        """
+        userID, name = self.me
+
+    @property
+    def token(self):
+        """The authorisation token for the current logged in user
+        """
+        return self.__dict__['token']
+    @token.setter
+    def token(self, token):
+        self.__dict__['token'] = token
+        if token is None:
+            headers = {}
+        else:
+            headers = {
+                'Authorization': 'Bearer {}'.format(token),
+            }
+        self._session.headers.update(headers)
+        # then populate self.userID and self.userName
+        resp = self._session.get(constants.API_BASE+"/users/me/")
+        if resp.status_code != 200:
+            raise AuthError('Invalid credentials trying to fetch user data.')
+        json_resp = resp.json()
+        data = json_resp['data']
+        self.user_id = data['id']
+        self.user_full_name = data['attributes']['full_name']
+
+    def authenticate(self, username, password, otp=None):
+        """Provide the username and
+
+        This authentication code comes from the
+        """
+        token_url = constants.API_BASE+'/tokens/'
+        token_request_body = {
+            'data': {
+                'type': 'tokens',
+                'attributes': {
+                    'name': '{} - {}'.format(
+                        constants.PROJECT_NAME, datetime.date.today()),
+                    'scopes': constants.APPLICATION_SCOPES
+                }
+            }
+        }
+        headers = {'content-type': 'application/json'}
+
+        if otp is not None:
+            headers['X-OSF-OTP'] = otp
+        resp = requests.post(
+            token_url,
+            headers=headers,
+            data=json.dumps(token_request_body),
+            auth=(username, password)
+            )
+        if resp.status_code in (401, 403):
+            # If login failed because of a missing two-factor authentication code, notify the user to try again
+            # This header appears for basic auth requests, and only when a valid password is provided
+            otp_val = resp.headers.get('X-OSF-OTP', '')
+            if otp_val.startswith('required'):
+                raise AuthError('Must provide code for two-factor authentication')
+            else:
+                raise AuthError('Invalid credentials')
+        elif not resp.status_code == 201:
+            raise AuthError('Invalid authorization response')
+        else:
+            json_resp = resp.json()
+            return json_resp['data']['attributes']['token_id']
 
 class Node(object):
     """The Node is an abstract class defined by OSF that could be a project
@@ -174,7 +291,7 @@ class Project(Node):
             print '.',
 
 #print("** Finding PsychoPy projects**")
-#psychopyProjs = requests.get("https://api.osf.io/v2/nodes/?filter[tags]=coder")
+#psychopyProjs = requests.get(constants.API_BASE+"/nodes/?filter[tags]=coder")
 #for node in psychopyProjs.json()['data']:
 #    print(node['attributes']['title'])
 #    print("  " + node['links']['html'])
@@ -213,13 +330,17 @@ def test_file_listing(proj_id, printing=False):
         print "  info:", this_file.links['info']
         if this_file.kind == 'file': #not folder
             print "  download:", this_file.links['download']
-    
+
 if __name__=="__main__":
-    #test_searchUser('peirce', printing=True)
+    test_searchUser('peirce', printing=True)
+
     t0 = time.time()
     test_search_projects(user_id='tkedn', printing=True)
     print "took %.4fs" %(time.time()-t0)
-    
-    t0 = time.time()
-    test_file_listing(proj_id='kesjg')
-    print "took %.4fs" %(time.time()-t0)
+
+    session = Session(username='xxxxxx@xxxxxxxxxxx', password='xxxxxxxxxx')
+    print session._session.headers
+    print "{}: {}".format(session.user_id, repr(session.user_full_name))
+#    t0 = time.time()
+#    test_file_listing(proj_id='kesjg')
+#    print "took %.4fs" %(time.time()-t0)
