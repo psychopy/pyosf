@@ -1,4 +1,4 @@
-import os
+import os, sys
 import json
 import hashlib
 
@@ -11,8 +11,33 @@ class LocalFiles(object):
         self._tree = None
         # this should trigger the work to be done
         self.path = path
-    def _scan_path_recursive(self, path=None):
-        """Examines the current node (folder) 
+    def create_index(self, path=None):
+        """Scans the tree of nodes recursively and returns 
+        file/folder details as a flat list of dicts
+        """
+        if path is None:
+            path = self.path
+        if os.path.isdir(path): 
+            d = {}
+            d['type'] = "directory"
+            d['path'] = path
+            files = [d]
+            self.nFolders += 1
+            #then find children as well
+            [files.extend(self.create_index(os.path.join(path,x))) \
+                for x in os.listdir(path)]
+#            files.extend(childList)
+            return files
+        else:
+            d = {}
+            d['path'] = path
+            d['type'] = "file"
+            d['sha'] = hashlib.sha256(path).hexdigest()
+            d['modified'] = os.path.getmtime(path)
+            self.nFiles += 1
+            return [d]
+    def _create_tree(self, path=None):
+        """Examines the current node recursively and returns a dict tree
         """
         if path is None:
             path = self.path
@@ -27,6 +52,7 @@ class LocalFiles(object):
             d['type'] = "file"
             d['sha'] = hashlib.sha256(path).hexdigest()
             d['modified'] = os.path.getmtime(path)
+            d['bytes'] = os.path.getsize(path)
             self.nFiles += 1
         return d
     @property
@@ -40,24 +66,24 @@ class LocalFiles(object):
         self._nFolders = 0
         self.sha_list = []
         #analyse path
-        self._tree = self._scan_path_recursive(path)
-    def toFile(self, filename):
+        self._tree = self.create_index(path)
+    def save(self, filename):
         """Save the tree of this path to a json file
         """
         with open(filename, 'wb') as f:
-            json.dump(self.tree, f, indent=4)
+            json.dump(self.file_index, f, indent=4)
     @property
-    def tree(self):
-        """Returns the tree of folders/files for this path
+    def file_index(self):
+        """Returns the dict tree of folders/files for this path
         """
         return self._tree
 
 if __name__ == "__main__":
     import time
     t0 = time.time()
-    localDB = LocalFiles('/Users/lpzjwp/Dropbox')
+    localDB = LocalFiles('/home/lpzjwp/Dropbox')
     t1 = time.time()
-    localDB.toFile('test.json')
+    localDB.save('test.json')
     t2 = time.time()
     print t1-t0, t2-t1
     print("nFolders={}, nFiles={}".format(localDB.nFolders, localDB.nFiles))
