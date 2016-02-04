@@ -6,51 +6,79 @@ Standard usage will then be::
 
     import pyosf
     #create an authenticated session
-    session = pyosf.session(username='something', token=someValue)   
+    session = pyosf.session(username='something', token=someValue)
     proj_ids = session.find_project_ids(searchStr = 'stroop')
     proj = proj_ids
 """
 
-
+try:
+    from psychopy import logging
+except:
+    import logging
 from . import remote
+import json
 
-class Session(object):
-    """A class to track a session with the OSF server.
-    
-    The session will store a token, which can then be used to authenticate
-    for project read/write access
+class Project(object):
+    """Stores the project information (the remote proejct on OSF, information
+    about the local files, and a record of the previous index of files)
     """
-    def __init__(self, username=None, password=None, token=None):
-        self.username = username
-        self.password = password
-        self.token = token
-        self.current_user_id = None 
-    def find_users(self, searchStr):
-        """Find user IDs whose name matches a given search string
+    def __init__(self, project_path=None, root_path=None, session=None):
+        """If project file has already been created then this can be used
+        to detect the root_path and create a remote.Session but otherwise a
+        Session object and root_path should be provided.
         """
-        reply = requests.get("https://api.osf.io/v2/users/?filter[full_name]=%s"\
-            %(name)).json()
-        attributes = reply['data'][0]['attributes']
-        userID = reply['data'][0]['id']
-        return userID, attributes
-    def find_my_projects(self, searchStr):
-        """Find project IDs matching a given search string, that the
-        current authenticaed user/session can access
-        """
-        pass #todo
-        
-class Project(Node):
-    """Top level node
-    (currently this does nothing different to Node)
-    """
-    def __init__(self, session, id, local_path):
-        self.session
-        self.local_path = local_path
-        remote.Node.__init__(self, id)
+        self.project_path = project_path
+        self.root_path = root_path
+        self.session = session # not needed if project_path exists
+        # these will be created from project_path or from root_path
+        self.index = None # the most recent index of files
+        self.local = None # a local.LocalFiles object (to be indexed)
+
     def __repr__(self):
         return "Project(%r)" %(self.id)
-    @property
-    def tree(self):
-        """Return the tree (file/node structure)
+
+    def save(self, proj_path=None):
+        """Save the project to a json-format file
         """
-        return self.
+        if proj_path is None:
+            proj_path = self.project_path
+        if not os.path.isdir(os.path.dirname(proj_path)):
+            os.mkdirs(os.path.dirname(proj_path))
+        if not os.path.isfile(proj_path):
+            logging.info("Creating new Project file: {}".format(proj_path))
+        # create the fields to save
+        d = {}
+        d['root_path'] = self.root_path
+        d['session'] = self.session.toDict()
+        d['index'] = self.index
+        # do the actual file save
+        with open(projPath, 'wb') as f:
+            json.dump(self.tree, f, indent=4)
+
+    def load(self, proj_path=None):
+        """Load the project from a json-format file
+        """
+        if projPath is None:
+            projPath = self.project_path
+        if not os.path.isfile(proj_path):
+            self.session = remote.Session()
+
+        # todo: handle the case that the path doesn't (yet) exist
+        with open(projPath, 'r') as f:
+            d = json.load(f)
+        if not self.root_path:
+            self.root_path = d['root_path']
+        elif self.root_path != d['root_path']:
+            logging.warn("The Project was given a directory that does not "\
+                "match the previous stored location. Using new location.")
+        self.session = remote.Session(token = d['session']['token'])
+        self.index = d['index']
+
+    def sync(self):
+        pass
+        # todo
+
+if __name__ == "__main__":
+    session = remote.Session()
+    proj = Project(proj_path = "~/.psychopy/projects/test.proj")
+    proj =

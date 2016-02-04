@@ -1,23 +1,24 @@
-import os, sys
+import os
+import sys
+from datetime import datetime
 import json
 import hashlib
 
 class LocalFiles(object):
-    def __init__(self, path):
+    def __init__(self, root_path):
         # these should be reset when the path is set
         self.nFiles = 0
         self.nFolders = 0
-        self.sha_list = []
-        self._tree = None
+        self.md5_list = []
         # this should trigger the work to be done
-        self.path = path
+        self.root_path = root_path
     def create_index(self, path=None):
-        """Scans the tree of nodes recursively and returns 
+        """Scans the tree of nodes recursively and returns
         file/folder details as a flat list of dicts
         """
         if path is None:
-            path = self.path
-        if os.path.isdir(path): 
+            path = self.root_path
+        if os.path.isdir(path):
             d = {}
             d['type'] = "directory"
             d['path'] = path
@@ -32,8 +33,8 @@ class LocalFiles(object):
             d = {}
             d['path'] = path
             d['type'] = "file"
-            d['sha'] = hashlib.sha256(path).hexdigest()
-            d['modified'] = os.path.getmtime(path)
+            d['md5'] = hashlib.md5(path).hexdigest()
+            d['date_modified'] = datetime.fromtimestamp(os.path.getmtime(path)).isoformat()
             self.nFiles += 1
             return [d]
     def _create_tree(self, path=None):
@@ -48,43 +49,42 @@ class LocalFiles(object):
             d['children'] = [self._scan_path_recursive(os.path.join(path,x)) \
                 for x in os.listdir(path)]
             self.nFolders += 1
-        else:   
+        else:
             d['type'] = "file"
-            d['sha'] = hashlib.sha256(path).hexdigest()
-            d['modified'] = os.path.getmtime(path)
+            d['md5'] = hashlib.md5(path).hexdigest()
+            d['date_modified'] = os.path.getmtime(path)
             d['bytes'] = os.path.getsize(path)
             self.nFiles += 1
         return d
     @property
-    def path(self):
-        return self._path
-    @path.setter
-    def path(self, path):
-        self._path = path
+    def root_path(self):
+        return self._root_path
+    @root_path.setter
+    def root_path(self, root_path):
+        self._root_path = root_path
         #reset counters
         self._nFiles = 0
         self._nFolders = 0
-        self.sha_list = []
-        #analyse path
-        self._tree = self.create_index(path)
+        self.md5_list = []
+        self.index = self.create_index()
+
     def save(self, filename):
         """Save the tree of this path to a json file
         """
         with open(filename, 'wb') as f:
-            json.dump(self.file_index, f, indent=4)
-    @property
-    def file_index(self):
-        """Returns the dict tree of folders/files for this path
-        """
-        return self._tree
+            json.dump(self.index, f, indent=4)
 
 if __name__ == "__main__":
     import time
     t0 = time.time()
-    localDB = LocalFiles('/home/lpzjwp/Dropbox')
+    if sys.platform == 'darwin':
+        root_path = '/Users/lpzjwp/Dropbox'
+    elif sys.platform.startswith('linux'):
+        root_path = '/home/lpzjwp/Dropbox'
+    localDB = LocalFiles(root_path)
     t1 = time.time()
     localDB.save('test.json')
     t2 = time.time()
     print t1-t0, t2-t1
     print("nFolders={}, nFiles={}".format(localDB.nFolders, localDB.nFiles))
-    print("took {}s to scan and {}s to print as json".format(t1-t0, t2-t1))
+    print("took {}s to scan and {}s to write as json".format(t1-t0, t2-t1))
