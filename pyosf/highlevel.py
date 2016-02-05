@@ -11,6 +11,7 @@ Standard usage will then be::
     proj = proj_ids
 """
 
+import os
 try:
     from psychopy import logging
 except:
@@ -69,9 +70,10 @@ class Project(object):
         if not self.root_path:
             self.root_path = d['root_path']
         elif self.root_path != d['root_path']:
-            logging.warn("The Project was given a directory that does not "\
-                "match the previous stored location. Using new location.")
-        self.session = remote.Session(token = d['session']['token'])
+            logging.warn("The Project was given a directory that does not "
+                         "match the previous stored location. "
+                         "Using new location.")
+        self.session = remote.Session(token=d['session']['token'])
         self.index = d['index']
 
     def sync(self):
@@ -80,5 +82,4 @@ class Project(object):
 
 if __name__ == "__main__":
     session = remote.Session()
-    proj = Project(proj_path = "~/.psychopy/projects/test.proj")
-    proj =
+    proj = Project(proj_path="~/.psychopy/projects/test.proj")

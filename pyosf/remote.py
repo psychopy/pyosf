@@ -5,21 +5,53 @@
 # License info: the code for Session.authenticate() is derived from the code
 # in https://github.com/CenterForOpenScience/osf-sync/blob/develop/osfoffline/utils/authentication.py
 
-import constants
 import os
-import time
 import requests
 import json
 import datetime
 try:
     from psychopy import logging
+    console = logging.console
 except:
     import logging
+    console = logging.getLogger()
+import constants
 
 
 class AuthError(Exception):
     """Authentication error while connecting to the OSF"""
     pass
+
+
+class TokenStorage(dict):
+    """dict-based class to store all the known tokens according to username
+    """
+    def __init__(self, *args, **kwargs):
+        dict.__init__(self, *args, **kwargs)
+        self.load()
+
+    def load(self, filename=None):
+        """Load all tokens from a given filename
+        (defaults to ~/.pyosf/tokens.json)
+        """
+        if filename is None:
+            filename = os.path.join(constants.PYOSF_FOLDER, 'tokens.json')
+        if os.path.isfile(filename):
+            with open(filename, 'r') as f:
+                try:
+                    self.update(json.load(f))
+                except ValueError:
+                    pass  # file didn't contain valid json data
+
+    def save(self, filename=None):
+        """Save all tokens from a given filename (defaults to ~/.pyosf/tokens.json)
+        """
+        if filename is None:
+            filename = os.path.join(constants.PYOSF_FOLDER, 'tokens.json')
+        if not os.path.isdir(constants.PYOSF_FOLDER):
+            os.makedirs(constants.PYOSF_FOLDER)
+        with open(filename, 'wb') as f:
+            json.dump(self, f)
 
 
 class Session(requests.Session):
@@ -28,7 +60,8 @@ class Session(requests.Session):
     The session will store a token, which can then be used to authenticate
     for project read/write access
     """
-    def __init__(self, username=None, password=None, token=None, otp=None):
+    def __init__(self, username=None, password=None, token=None, otp=None,
+                 remember_me=True):
         """Create a session to send requests with the OSF server
 
         Provide either username and password for authentication with a new
@@ -40,18 +73,27 @@ class Session(requests.Session):
         self.password = password
         self.user_id = None  # populate when token property is set
         self.user_full_name = None
+        self.remember_me = remember_me
+        self.authenticated = False
         # set token (which will update session headers as needed)
         if token is not None:
             self.token = token
         elif username is not None:
-            self.token = self.authenticate(username, password, otp)
+            self.authenticate(username, password, otp)
         self.headers.update({'content-type': 'application/json'})
 
-    def find_users(self, searchStr):
+    def search_project_names(self, search_str, tags="psychopy"):
+        """
+        """
+        psychopyProjs = self.session.get(constants.API_BASE +
+                                         "/nodes/?filter[tags]=coder")
+        return psychopyProjs.json()
+
+    def find_users(self, search_str):
         """Find user IDs whose name matches a given search string
         """
         reply = self.get(constants.API_BASE + "/users/?filter[full_name]=%s"
-                         % (searchStr)).json()
+                         % (search_str)).json()
         users = []
         for thisUser in reply['data']:
             attrs = thisUser['attributes']
@@ -85,7 +127,9 @@ class Session(requests.Session):
         return self.__dict__['token']
 
     @token.setter
-    def token(self, token):
+    def token(self, token, save=None):
+        """Set the token for this session and check that it works for auth
+        """
         self.__dict__['token'] = token
         if token is None:
             headers = {}
@@ -98,16 +142,40 @@ class Session(requests.Session):
         resp = self.get(constants.API_BASE+"/users/me/")
         if resp.status_code != 200:
             raise AuthError('Invalid credentials trying to fetch user data.')
+        else:
+            logging.info("Successful authentication with token")
         json_resp = resp.json()
+        self.authenticated = True
         data = json_resp['data']
         self.user_id = data['id']
         self.user_full_name = data['attributes']['full_name']
+        # update stored tokens
+        if save is None:
+            save = self.remember_me
+        if save and self.username is not None:
+            tokens = TokenStorage()
+            tokens[self.username] = token
+            tokens.save()
 
-    def authenticate(self, username, password, otp=None):
-        """Provide the username and
+    def authenticate(self, username, password=None, otp=None):
+        """Authenticate according to username and password (if needed).
 
-        This authentication code comes from the
+        If the username has been used already to create a token then that
+        token will be reused (and no password is required). If not then the
+        password will be sent (using https) and an auth token will be stored.
         """
+        # try fetching a token first
+        tokens = TokenStorage()
+        if username in tokens:
+            logging.info("Found previous auth token for {}".format(username))
+            try:
+                self.token = tokens[username]
+                return 1
+            except AuthError:
+                if password is None:
+                    raise AuthError("User token didn't work and no password")
+        elif password is None:
+            AuthError("No auth token found and no password given")
         token_url = constants.API_BASE+'/tokens/'
         token_request_body = {
             'data': {
@@ -136,14 +204,18 @@ class Session(requests.Session):
             # valid password is provided
             otp_val = resp.headers.get('X-OSF-OTP', '')
             if otp_val.startswith('required'):
-                raise AuthError('Must provide code for two-factor authentication')
+                raise AuthError('Must provide code for two-factor'
+                                'authentication')
             else:
                 raise AuthError('Invalid credentials')
         elif not resp.status_code == 201:
             raise AuthError('Invalid authorization response')
         else:
             json_resp = resp.json()
-            return json_resp['data']['attributes']['token_id']
+            logging.info("Successfully authenticated with username/password")
+            self.authenticated = True
+            self.token = json_resp['data']['attributes']['token_id']
+            return 1
 
 
 class Node(object):
@@ -164,11 +236,11 @@ class Node(object):
             self.json = req.json()['data']
         else:
             # treat as OSF id and fetch the URL
-            req = self.session.get("{}/nodes/{}/".format(constants.API_BASE,id))
+            req = self.session.get("{}/nodes/{}/".format(constants.API_BASE, id))
             self.json = req.json()['data']
 
     def __repr__(self):
-        return "Node(%r)" %(self.id)
+        return "Node(%r)" % (self.id)
 
     def __str__(self):
         return json.dumps(self.json, sort_keys=True, indent=4)
@@ -232,7 +304,6 @@ class Node(object):
         reply = self.session.get(url).json()['data']
         file_list = []
         for entry in reply:
-            print('thisFolderEntry', entry['type'], entry['id'])
             f = FileNode(self.session, entry)
             d = {}
             d['type'] = f.kind
@@ -258,6 +329,7 @@ class Node(object):
 
         file_list.extend(self._node_file_list("{}/nodes/{}/files/osfstorage"
                          .format(constants.API_BASE, self.id)))
+
         # then process our own files
 #        req = self.session.get(constants.API_BASE+"/nodes/{}/files/osfstorage"\
 #            .format(self.id))
@@ -376,75 +448,35 @@ class FileNode(object):
                 for chunk in r.iter_content(1024):
                     f.write(chunk)
 
+
 class Project(Node):
     """Top level node
     (currently this does nothing different to Node)
     """
     def __init__(self, session, id):
         Node.__init__(self, session, id)
+
     def __repr__(self):
-        return "Project(%r)" %(self.id)
+        return "Project(%r)" % (self.id)
+
     def downloadAll(self, local_path=None):
         for file_node in self.file_list:
-            file_node.download(target_folder = local_path)
-            print '.',
+            file_node.download(target_folder=local_path)
 
-#print("** Finding PsychoPy projects**")
-#psychopyProjs = self.session.get(constants.API_BASE+"/nodes/?filter[tags]=coder")
-#for node in psychopyProjs.json()['data']:
-#    print(node['attributes']['title'])
-#    print("  " + node['links']['html'])
-
-def test_searchUser(session, name = 'peirce', printing=False):
-    if printing:
-        print("\n** Finding Jon **")
-    users = session.find_users(name)
-    full_name = users[0]['full_name']
-    print users[0]
-    user_id = users[0]['id']
-    if printing:
-        print "Found OSF user '%s' with id=%s" %(full_name, user_id)
-
-def test_search_projects(session, user_id, printing=False):
-    if printing:
-        print("\n** Finding Jon Projects **")
-    jonProjs = session.find_user_projects(user_id)
-    for proj in jonProjs:
-        if printing:
-            print(proj['title'])
-
-def test_file_listing(session, proj_id, printing=False):
-    if printing:
-        print("\n** Finding Files **")
-    proj = Project(id=proj_id, session=session)
-    if printing:
-        print repr(proj), proj.title, "nodes:"
-    #print proj
-    for this_child in proj.children:
-        if printing:
-            print ' %r (%r), parent=%r' %(this_child.title,
-                this_child, this_child.parent)
-    #look at some file objects for proj
-#    print repr(proj), proj.title, "files:"
-    print json.dumps(proj.create_index(), indent=2)
-#        print ' - ', this_file.name, this_file.kind, this_file.size, this_file.path
-#        print "  info:", this_file.links['info']
-#        if this_file.kind == 'file': #not folder
-#            print "  download:", this_file.links['download']
 
 if __name__ == "__main__":
-
+    # set up logging to give more info
+    console.setLevel(logging.DEBUG)
+    # set up session with full info
+    tokens = TokenStorage()
+    if 'jon@peirce.org.uk' in tokens:
+        del tokens['jon@peirce.org.uk']
+        tokens.save()
     session = Session(username='jon@peirce.org.uk', password='aTestPassword')
-    print "{}: {}".format(session.user_id, repr(session.user_full_name))
+    print "Success with username and password"
+    # should now be able to use username only
+    session = Session(username='jon@peirce.org.uk')
+    print "Success with username only (stored token)"
 
-    test_searchUser(session, 'peirce', printing=True)
-
-    t0 = time.time()
-    test_search_projects(session, user_id='tkedn', printing=True)
-    print "took {:.4f}s".format(time.time()-t0)
-
-    projs = session.find_my_projects()
-    proj_id = projs[1]['id']
-    t0 = time.time()
-    test_file_listing(proj_id=proj_id, session=session)
-    print "took %.4fs" %(time.time()-t0)
+    if hasattr(logging, 'flush'):
+        logging.flush()  # psychopy.logging needs manual flush
