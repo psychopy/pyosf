@@ -1,3 +1,4 @@
+from __future__ import print_function
 import os
 import sys
 from datetime import datetime
@@ -87,8 +88,8 @@ if __name__ == "__main__":
         root_path = '/home/lpzjwp/Dropbox'
     localDB = LocalFiles(root_path)
     t1 = time.time()
-    localDB.save('test.json')
+    localDB.save('tmp.json')
     t2 = time.time()
-    print t1-t0, t2-t1
+    print(t1-t0, t2-t1)
     print("nFolders={}, nFiles={}".format(localDB.nFolders, localDB.nFiles))
     print("took {}s to scan and {}s to write as json".format(t1-t0, t2-t1))

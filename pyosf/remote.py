@@ -4,7 +4,7 @@
 
 # License info: the code for Session.authenticate() is derived from the code
 # in https://github.com/CenterForOpenScience/osf-sync/blob/develop/osfoffline/utils/authentication.py
-
+from __future__ import print_function
 import os
 import requests
 import json
@@ -338,7 +338,7 @@ class Node(object):
 #        for entry in req.json()['data']:
 #            f = FileNode(self.session, entry)
 #            d = {}
-#            print "thisFileIs", f.name, f.path
+#            print("thisFileIs", f.name, f.path)
 #            d['type'] = f.kind
 #            d['path'] = f.path
 #            d['date_modified'] = f.attributes['date_modified']
@@ -347,10 +347,10 @@ class Node(object):
 #                file_list.extend(self._folder_file_list(filesUrl))
 
 #                reply = self.session.get(filesUrl).json()['data']
-#                print self.session.headers
-#                print reply
+#                print(self.session.headers)
+#                print(reply)
 #                for entry in reply:
-#                    print 'thisFolderEntry', entry['type'], entry['id']
+#                    print('thisFolderEntry', entry['type'], entry['id'])
 #                    folder_files = Node(session=self.session, id=entry['id'], ).create_index()
 #                    file_list.extend(folder_files)
 
@@ -475,10 +475,10 @@ if __name__ == "__main__":
         del tokens['jon@peirce.org.uk']
         tokens.save()
     session = Session(username='jon@peirce.org.uk', password='aTestPassword')
-    print "Success with username and password"
+    print("Success with username and password")
     # should now be able to use username only
     session = Session(username='jon@peirce.org.uk')
-    print "Success with username only (stored token)"
+    print("Success with username only (stored token)")
 
     if hasattr(logging, 'flush'):
         logging.flush()  # psychopy.logging needs manual flush

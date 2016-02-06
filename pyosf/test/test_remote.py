@@ -4,7 +4,8 @@ Created on Fri Feb  5 16:01:26 2016
 
 @author: lpzjwp
 """
-from __future__ import absolute_import
+from __future__ import absolute_import, print_function
+
 from pyosf import remote
 
 printing = True
@@ -44,15 +45,15 @@ class TestSession(object):
         proj_id = 'qgt58'
         print("\n** Finding Files **")
         proj = remote.Project(id=proj_id, session=self.session)
-        print repr(proj), proj.title, "nodes:"
+        print(repr(proj), proj.title, "nodes:")
         for this_child in proj.children:
-            print ' %r (%r), parent=%r' %(this_child.title,
-                    this_child, this_child.parent)
+            print(' {} ({}), parent={}'.format(this_child.title,
+                                        this_child, this_child.parent))
 
         # look at some file objects for proj
-        print repr(proj), proj.title, "files:"
+        print(repr(proj), proj.title, "files:")
         file_list = proj.create_index()
-        print len(file_list)
+        print(len(file_list))
         #        print ' - ', this_file.name, this_file.kind, this_file.size, this_file.path
         #        print "  info:", this_file.links['info']
         #        if this_file.kind == 'file': #not folder
