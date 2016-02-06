@@ -5,6 +5,7 @@ from datetime import datetime
 import json
 import hashlib
 
+
 class LocalFiles(object):
     def __init__(self, root_path):
         # these should be reset when the path is set
