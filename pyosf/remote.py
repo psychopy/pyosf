@@ -3,7 +3,9 @@
 """
 
 # License info: the code for Session.authenticate() is derived from the code
-# in https://github.com/CenterForOpenScience/osf-sync/blob/develop/osfoffline/utils/authentication.py
+# in https://github.com/CenterForOpenScience/osf-sync/blob/develop/...
+#    /osfoffline/utils/authentication.py
+
 from __future__ import print_function
 import os
 import requests
@@ -15,7 +17,7 @@ try:
 except:
     import logging
     console = logging.getLogger()
-import constants
+from . import constants
 
 
 class AuthError(Exception):
