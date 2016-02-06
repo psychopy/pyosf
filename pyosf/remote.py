@@ -101,9 +101,11 @@ class Session(requests.Session):
             users.append(attrs)
         return users
 
-    def find_user_projects(self, user_id):
-        """Finds all the projects of a given userID
+    def find_user_projects(self, user_id=None):
+        """Finds all the projects of a given user_id (None for current user)
         """
+        if user_id is None:
+            user_id = self.user_id
         reply = self.get(constants.API_BASE +
             "/users/%s/nodes?filter[category]=project" % user_id).json()
         projs = []

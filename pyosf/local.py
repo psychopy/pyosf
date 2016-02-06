@@ -12,6 +12,7 @@ class LocalFiles(object):
         self.md5_list = []
         # this should trigger the work to be done
         self.root_path = root_path
+
     def create_index(self, path=None):
         """Scans the tree of nodes recursively and returns
         file/folder details as a flat list of dicts
@@ -24,30 +25,31 @@ class LocalFiles(object):
             d['path'] = path
             files = [d]
             self.nFolders += 1
-            #then find children as well
-            [files.extend(self.create_index(os.path.join(path,x))) \
+            # then find children as well
+            [files.extend(self.create_index(os.path.join(path, x)))
                 for x in os.listdir(path)]
-#            files.extend(childList)
             return files
         else:
             d = {}
             d['path'] = path
             d['type'] = "file"
             d['md5'] = hashlib.md5(path).hexdigest()
-            d['date_modified'] = datetime.fromtimestamp(os.path.getmtime(path)).isoformat()
+            d['date_modified'] = datetime.fromtimestamp(os.path.getmtime(path)
+                                                        ).isoformat()
             self.nFiles += 1
             return [d]
+
     def _create_tree(self, path=None):
         """Examines the current node recursively and returns a dict tree
         """
         if path is None:
             path = self.path
         d = {'name': os.path.basename(path),
-            'path': path}
+             'path': path}
         if os.path.isdir(path):
             d['type'] = "directory"
-            d['children'] = [self._scan_path_recursive(os.path.join(path,x)) \
-                for x in os.listdir(path)]
+            d['children'] = [self._scan_path_recursive(os.path.join(path, x))
+                             for x in os.listdir(path)]
             self.nFolders += 1
         else:
             d['type'] = "file"
@@ -56,13 +58,15 @@ class LocalFiles(object):
             d['bytes'] = os.path.getsize(path)
             self.nFiles += 1
         return d
+
     @property
     def root_path(self):
         return self._root_path
+
     @root_path.setter
     def root_path(self, root_path):
         self._root_path = root_path
-        #reset counters
+        # reset counters
         self._nFiles = 0
         self._nFolders = 0
         self.md5_list = []
