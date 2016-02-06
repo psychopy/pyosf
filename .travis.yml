@@ -11,3 +11,7 @@ install:
  - python setup.py install
 # command to run tests
 script: py.test
+script:
+  coverage run --source=pyosf setup.py test
+after_success:
+  coveralls
