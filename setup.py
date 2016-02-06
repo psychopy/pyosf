@@ -38,10 +38,7 @@ setup(
     keywords='Open Science Framework PsychoPy',
     packages=find_packages(exclude=['docs', 'tests']),
     # $ pip install -e .[dev,test]
-    extras_require={
-        'dev': [],
-        'test': ['pytest', 'coverage'],
-    },
+    tests_require=['pytest','coverage'],
     package_data={
         'sample': ['package_data.dat'],
     },
