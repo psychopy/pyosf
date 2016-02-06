@@ -8,6 +8,7 @@
 
 from __future__ import print_function
 import os
+import sys
 import requests
 import json
 import datetime
@@ -19,6 +20,7 @@ except:
     console = logging.getLogger()
 from . import constants
 
+PY3 = sys.version_info > (3,)
 
 class AuthError(Exception):
     """Authentication error while connecting to the OSF"""
@@ -53,7 +55,11 @@ class TokenStorage(dict):
         if not os.path.isdir(constants.PYOSF_FOLDER):
             os.makedirs(constants.PYOSF_FOLDER)
         with open(filename, 'wb') as f:
-            json.dump(self, f)
+            json_str = json.dumps(self)
+            if PY3:
+                f.write(bytes(json_str, 'UTF-8'))
+            else:
+                f.write(json_str)
 
 
 class Session(requests.Session):
