@@ -7,4 +7,4 @@ __url__ = 'https://github.com/psychopy/pyosf'
 __downloadUrl__ = 'https://github.com/psychopy/pyosf/releases/'
 
 from .project import Project
-from .session import Session
+from .remote import Session

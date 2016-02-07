@@ -68,10 +68,11 @@ class Project(object):
             else:  # we have no remote but a username so try a remote.Session
                 session = remote.Session(username)
 
-        elif username is None and remote
-        # create a session
-        if username is None and
+#        elif username is None and remote
+#        # create a session
+#        if username is None and
         self.local = None  # a local.LocalFiles object (to be indexed)
+
     def __repr__(self):
         return "Project({})".format(self.id)
 
