@@ -10,8 +10,8 @@ install:
  - pip install coverage pytest-runner
  - python setup.py install
 # command to run tests
-script: py.test
 script:
-  coverage run --source=pyosf setup.py test
+  - coverage run --source=pyosf setup.py test
 after_success:
-  coveralls
+  - coveralls
+  - codecov

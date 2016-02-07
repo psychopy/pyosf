@@ -183,9 +183,10 @@ class Session(requests.Session):
                 return 1
             except AuthError:
                 if password is None:
-                    raise AuthError("User token didn't work and no password")
+                    raise AuthError("User token didn't work and no password "
+                                    "has been provided")
         elif password is None:
-            AuthError("No auth token found and no password given")
+            raise AuthError("No auth token found and no password given")
         token_url = constants.API_BASE+'/tokens/'
         token_request_body = {
             'data': {

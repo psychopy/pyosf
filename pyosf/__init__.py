@@ -6,4 +6,5 @@ __maintainer_email__ = 'jon@peirce.org.uk'
 __url__ = 'https://github.com/psychopy/pyosf'
 __downloadUrl__ = 'https://github.com/psychopy/pyosf/releases/'
 
-from .highlevel import Project
+from .project import Project
+from .session import Session
