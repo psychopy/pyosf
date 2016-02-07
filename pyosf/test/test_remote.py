@@ -44,20 +44,23 @@ class TestSession(object):
     def test_file_listing(self):
         proj_id = 'qgt58'
         print("\n** Finding Files **")
-        proj = remote.OSF_Project(id=proj_id, session=self.session)
+        proj = self.session.open_project(proj_id)
         print(repr(proj), proj.title, "nodes:")
         for this_child in proj.children:
-            print(' {} ({}), parent={}'.format(this_child.title,
-                                        this_child, this_child.parent))
+            print(' {} ({}), parent={}'
+                  .format(this_child.title, this_child, this_child.parent))
 
         # look at some file objects for proj
         print(repr(proj), proj.title, "files:")
         file_list = proj.create_index()
-        print(len(file_list))
-        #        print ' - ', this_file.name, this_file.kind, this_file.size, this_file.path
-        #        print "  info:", this_file.links['info']
-        #        if this_file.kind == 'file': #not folder
-        #            print "  download:", this_file.links['download']
+        print("nFiles: {}".format(len(file_list)))
+        for n, this_file in enumerate(file_list):
+            if n > 5:
+                print('...')
+                break
+            print(' - ', this_file['name'], this_file['kind'],
+                  this_file['size'], this_file['path'])
+            print("  links:", this_file['links'])
 
 if __name__ == "__main__":
     import pytest

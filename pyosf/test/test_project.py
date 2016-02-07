@@ -12,9 +12,14 @@ from pyosf import remote, project
 def test_open_project():
     session = remote.Session(username='jon@peirce.org.uk',
                              password='aTestPassword')
-    rem_proj = remote.OSF_Project(session=session, id='qgt58')
+    rem_proj = session.open_project('qgt58')
     proj = project.Project(project_file="tmp/test.proj",
-                           root_path="tmp", remote=rem_proj)
+                           root_path="tmp", osf=rem_proj)
+    # test the saving of the file
+    proj.save()
+    # having saved it we can test that it reloads without user/password
+    proj = project.Project(project_file="tmp/test.proj")
+
     print(proj)
 
 if __name__ == "__main__":

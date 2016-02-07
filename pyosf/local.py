@@ -23,7 +23,7 @@ class LocalFiles(object):
             path = self.root_path
         if os.path.isdir(path):
             d = {}
-            d['type'] = "directory"
+            d['kind'] = "directory"
             d['path'] = path
             files = [d]
             self.nFolders += 1
@@ -34,7 +34,7 @@ class LocalFiles(object):
         else:
             d = {}
             d['path'] = path
-            d['type'] = "file"
+            d['kind'] = "file"
             d['md5'] = hashlib.md5(path).hexdigest()
             d['date_modified'] = datetime.fromtimestamp(os.path.getmtime(path)
                                                         ).isoformat()
@@ -49,15 +49,15 @@ class LocalFiles(object):
         d = {'name': os.path.basename(path),
              'path': path}
         if os.path.isdir(path):
-            d['type'] = "directory"
+            d['kind'] = "directory"
             d['children'] = [self._scan_path_recursive(os.path.join(path, x))
                              for x in os.listdir(path)]
             self.nFolders += 1
         else:
-            d['type'] = "file"
+            d['kind'] = "file"
             d['md5'] = hashlib.md5(path).hexdigest()
             d['date_modified'] = os.path.getmtime(path)
-            d['bytes'] = os.path.getsize(path)
+            d['size'] = os.path.getsize(path)
             self.nFiles += 1
         return d
 

@@ -90,6 +90,14 @@ class Session(requests.Session):
             self.authenticate(username, password, otp)
         self.headers.update({'content-type': 'application/json'})
 
+    def open_project(self, proj_id):
+        """Returns a OSF_Project object or None (if that id couldn't be opened)
+        """
+        try:
+            return OSF_Project(session=self, id=proj_id)
+        except:
+            return None
+
     def search_project_names(self, search_str, tags="psychopy"):
         """
         """
@@ -313,12 +321,14 @@ class Node(object):
         for entry in reply:
             f = FileNode(self.session, entry)
             d = {}
-            d['type'] = f.kind
+            d['kind'] = f.kind
             d['path'] = f.path
+            d['name'] = f.name
+            d['links'] = f.links
             if f.kind == 'file':  # not folder
                 d['url'] = f.links['download']
                 d['md5'] = f.md5
-                d['bytes'] = f.size
+                d['size'] = f.size
                 d['date_modified'] = f.modified
                 file_list.append(d)
             elif f.kind == 'folder':
@@ -344,7 +354,7 @@ class Node(object):
 #            f = FileNode(self.session, entry)
 #            d = {}
 #            print("thisFileIs", f.name, f.path)
-#            d['type'] = f.kind
+#            d['kind'] = f.kind
 #            d['path'] = f.path
 #            d['date_modified'] = f.attributes['date_modified']
 #            elif f.kind == 'folder':
@@ -355,7 +365,7 @@ class Node(object):
 #                print(self.session.headers)
 #                print(reply)
 #                for entry in reply:
-#                    print('thisFolderEntry', entry['type'], entry['id'])
+#                    print('thisFolderEntry', entry['kind'], entry['id'])
 #                    folder_files = Node(session=self.session, id=entry['id'], ).create_index()
 #                    file_list.extend(folder_files)
 
