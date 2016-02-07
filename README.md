@@ -18,3 +18,4 @@ It can be distributed freely under the MIT license.
 
 
 [![Build Status](https://travis-ci.org/psychopy/pyosf.svg?branch=master)](https://travis-ci.org/psychopy/pyosf)
+[![codecov.io](https://codecov.io/github/psychopy/pyosf/coverage.svg?branch=master)](https://codecov.io/github/psychopy/pyosf?branch=master)
