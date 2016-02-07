@@ -44,7 +44,7 @@ class TestSession(object):
     def test_file_listing(self):
         proj_id = 'qgt58'
         print("\n** Finding Files **")
-        proj = remote.Project(id=proj_id, session=self.session)
+        proj = remote.OSF_Project(id=proj_id, session=self.session)
         print(repr(proj), proj.title, "nodes:")
         for this_child in proj.children:
             print(' {} ({}), parent={}'.format(this_child.title,
@@ -61,4 +61,4 @@ class TestSession(object):
 
 if __name__ == "__main__":
     import pytest
-    pytest.main(args=['-s'])
+    pytest.main(args=[__file__, '-s'])

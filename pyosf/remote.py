@@ -247,20 +247,16 @@ class Node(object):
             self.json = req.json()['data']
         else:
             # treat as OSF id and fetch the URL
-            req = self.session.get("{}/nodes/{}/".format(constants.API_BASE, id))
+            req = self.session.get("{}/nodes/{}/".format(constants.API_BASE,
+                                   id))
             self.json = req.json()['data']
+        self.id = id
 
     def __repr__(self):
         return "Node(%r)" % (self.id)
 
     def __str__(self):
         return json.dumps(self.json, sort_keys=True, indent=4)
-
-    @property
-    def id(self):
-        """The unique identifier of this node/project for the OSF database
-        """
-        return self.json['id']
 
     @property
     def kind(self):
@@ -460,7 +456,7 @@ class FileNode(object):
                     f.write(chunk)
 
 
-class Project(Node):
+class OSF_Project(Node):
     """Top level node
     (currently this does nothing different to Node)
     """
@@ -468,7 +464,7 @@ class Project(Node):
         Node.__init__(self, session, id)
 
     def __repr__(self):
-        return "Project(%r)" % (self.id)
+        return "OSF_Project(%r)" % (self.id)
 
     def downloadAll(self, local_path=None):
         for file_node in self.file_list:

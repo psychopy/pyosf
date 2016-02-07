@@ -17,7 +17,7 @@ try:
     from psychopy import logging
 except:
     import logging
-from . import remote
+from pyosf import remote
 import json
 
 PY3 = sys.version_info > (3,)
@@ -74,7 +74,7 @@ class Project(object):
         self.local = None  # a local.LocalFiles object (to be indexed)
 
     def __repr__(self):
-        return "Project({})".format(self.id)
+        return "Project({})".format(self.project_file)
 
     def save(self, proj_path=None):
         """Save the project to a json-format file
@@ -152,4 +152,6 @@ class Project(object):
 if __name__ == "__main__":
     session = remote.Session(username='jon@peirce.org.uk',
                              password='aTestPassword')
-    proj = Project(proj_path="tmp/test.proj", root_path="tmp", session=session)
+    rem_proj = remote.Project(session=session, id='qgt58')
+    proj = project.Project(project_file="tmp/test.proj",
+                           root_path="tmp", remote=rem_proj)
