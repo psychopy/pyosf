@@ -7,7 +7,7 @@ Created on Sun Feb  7 21:31:15 2016
 
 @author: lpzjwp
 """
-from __future__ import relative_import, printing_function
+from __future__ import absolute_import, printing_function
 
 from os.path import splitext
 from .constants import SHA
