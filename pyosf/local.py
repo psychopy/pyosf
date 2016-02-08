@@ -22,18 +22,23 @@ class LocalFiles(object):
         if path is None:
             path = self.root_path
         if os.path.isdir(path):
-            d = {}
-            d['kind'] = "directory"
-            d['path'] = path
-            files = [d]
-            self.nFolders += 1
+            if path is not self.root_path:  # don't store root as a folder
+                d = {}
+                d['kind'] = "directory"
+                d['full_path'] = path
+                d['path'] = os.path.relpath(path, self.root_path)
+                files = [d]
+                self.nFolders += 1
+            else:
+                files = []
             # then find children as well
             [files.extend(self.create_index(os.path.join(path, x)))
                 for x in os.listdir(path)]
             return files
         else:
             d = {}
-            d['path'] = path
+            d['full_path'] = path
+            d['path'] = os.path.relpath(path, self.root_path)
             d['kind'] = "file"
             d['md5'] = hashlib.md5(path).hexdigest()
             d['date_modified'] = datetime.fromtimestamp(os.path.getmtime(path)
@@ -68,6 +73,9 @@ class LocalFiles(object):
     @root_path.setter
     def root_path(self, root_path):
         self._root_path = root_path
+        # create if it doesn't exist yet
+        if not os.path.isdir(self._root_path):
+            os.makedirs(self._root_path)
         # reset counters
         self._nFiles = 0
         self._nFolders = 0

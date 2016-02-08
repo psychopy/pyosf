@@ -22,13 +22,14 @@ from . import constants
 
 PY3 = sys.version_info > (3,)
 
+
 class AuthError(Exception):
     """Authentication error while connecting to the OSF"""
     pass
 
 
 class TokenStorage(dict):
-    """dict-based class to store all the known tokens according to username
+    """Dict-based class to store all the known tokens according to username
     """
     def __init__(self, *args, **kwargs):
         dict.__init__(self, *args, **kwargs)
@@ -48,7 +49,8 @@ class TokenStorage(dict):
                     pass  # file didn't contain valid json data
 
     def save(self, filename=None):
-        """Save all tokens from a given filename (defaults to ~/.pyosf/tokens.json)
+        """Save all tokens from a given filename
+        (filename defaults to ~/.pyosf/tokens.json)
         """
         if filename is None:
             filename = os.path.join(constants.PYOSF_FOLDER, 'tokens.json')
@@ -94,22 +96,23 @@ class Session(requests.Session):
         """Returns a OSF_Project object or None (if that id couldn't be opened)
         """
         try:
-            return OSF_Project(session=self, id=proj_id)
+            return OSFProject(session=self, id=proj_id)
         except:
             return None
 
     def search_project_names(self, search_str, tags="psychopy"):
         """
         """
-        psychopyProjs = self.session.get(constants.API_BASE +
-                                         "/nodes/?filter[tags]=coder")
+        psychopyProjs = self.session.get("{}/nodes/?filter[tags]=coder"
+                                         .format(constants.API_BASE))
+
         return psychopyProjs.json()
 
     def find_users(self, search_str):
         """Find user IDs whose name matches a given search string
         """
-        reply = self.get(constants.API_BASE + "/users/?filter[full_name]=%s"
-                         % (search_str)).json()
+        reply = self.get("{}/users/?filter[full_name]={}"
+                         .format(constants.API_BASE, search_str)).json()
         users = []
         for thisUser in reply['data']:
             attrs = thisUser['attributes']
@@ -122,8 +125,8 @@ class Session(requests.Session):
         """
         if user_id is None:
             user_id = self.user_id
-        reply = self.get(constants.API_BASE +
-            "/users/%s/nodes?filter[category]=project" % user_id).json()
+        reply = self.get("{}/users/{}/nodes?filter[category]=project"
+                         .format(constants.API_BASE, user_id)).json()
         projs = []
         for thisProj in reply['data']:
             attrs = thisProj['attributes']
@@ -244,6 +247,13 @@ class Node(object):
 
     Nearly all the attributes of this class are read-only. They are set by
     on init based on the OSF database
+
+    Parameters
+    ----------
+
+    session : a Session object
+    id : the project/node id in open science framework
+
     """
     def __init__(self, session, id):
         if session is None:
@@ -328,6 +338,7 @@ class Node(object):
             if f.kind == 'file':  # not folder
                 d['url'] = f.links['download']
                 d['md5'] = f.md5
+                d['sha256'] = f.sha256
                 d['size'] = f.size
                 d['date_modified'] = f.modified
                 file_list.append(d)
@@ -337,7 +348,7 @@ class Node(object):
         return file_list
 
     def create_index(self):
-        """Returns a flat list of all files in the tree from this node downwards
+        """Returns a flat list of all files from this node down
         """
         file_list = []
         # process child nodes first
@@ -347,34 +358,22 @@ class Node(object):
         file_list.extend(self._node_file_list("{}/nodes/{}/files/osfstorage"
                          .format(constants.API_BASE, self.id)))
 
-        # then process our own files
-#        req = self.session.get(constants.API_BASE+"/nodes/{}/files/osfstorage"\
-#            .format(self.id))
-#        for entry in req.json()['data']:
-#            f = FileNode(self.session, entry)
-#            d = {}
-#            print("thisFileIs", f.name, f.path)
-#            d['kind'] = f.kind
-#            d['path'] = f.path
-#            d['date_modified'] = f.attributes['date_modified']
-#            elif f.kind == 'folder':
-#                filesUrl = f.links['move'] #this is a bug in API V2? should be info link
-#                file_list.extend(self._folder_file_list(filesUrl))
-
-#                reply = self.session.get(filesUrl).json()['data']
-#                print(self.session.headers)
-#                print(reply)
-#                for entry in reply:
-#                    print('thisFolderEntry', entry['kind'], entry['id'])
-#                    folder_files = Node(session=self.session, id=entry['id'], ).create_index()
-#                    file_list.extend(folder_files)
-
         return file_list
+
 
 class FileNode(object):
     """A Python object to handle file nodes in the OSF database
     This is sufficiently different in its attribtues from normal nodes
     that it shouldn't inherit.
+
+    Parameters
+    ----------
+
+    session : a Session object
+        Used to retrieve certain attributes
+    json_data : a dict-type object
+        Storing the fields from an OSF File Node
+
     """
     def __init__(self, session, json_data):
         """Initialise with the request(url).json()['data']
@@ -405,9 +404,9 @@ class FileNode(object):
         """The path to this folder/file from the root
         """
         if 'materialized' in self.json['attributes'].keys():
-            return self.json['attributes']['materialized']
+            return self.json['attributes']['materialized'][1:]  # ignore "/"
         else:
-            return self.json['attributes']['path']
+            return self.json['attributes']['name']
 
     @property
     def modified(self):
@@ -438,15 +437,22 @@ class FileNode(object):
     def size(self):
         """Only valid for files (returns None for folders)
         """
-        if self.kind=="file":
+        if self.kind == "file":
             return self.json['attributes']['size']
         else:
             return None
 
     @property
     def md5(self):
-        if self.kind=="file":
+        if self.kind == "file":
             return self.json['attributes']['extra']['hashes']['md5']
+        else:
+            return None
+
+    @property
+    def sha256(self):
+        if self.kind == "file":
+            return self.json['attributes']['extra']['hashes']['sha256']
         else:
             return None
 
@@ -456,6 +462,12 @@ class FileNode(object):
 
     def download(self, target_folder):
         """Download this file to the target folder
+
+        Parameters
+        ----------
+        target_folder : str
+            The root location to save the files in
+
         """
         URL = self.links['download']
         r = self.session.get(URL, stream=True)
@@ -466,9 +478,15 @@ class FileNode(object):
                     f.write(chunk)
 
 
-class OSF_Project(Node):
-    """Top level node
-    (currently this does nothing different to Node)
+class OSFProject(Node):
+    """A project Node from the OSF. Most methods are defined by Node
+
+    Parameters
+    ----------
+
+    session : a Session object
+    id : the id of the project node on OSF
+
     """
     def __init__(self, session, id):
         Node.__init__(self, session, id)

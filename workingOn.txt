@@ -1,11 +1,13 @@
   [x] fetch files from server and analyse remote project
   [x] analyse local files
   [x] authentication with username/password or token
+  [x] saving/loading local index (in project)
+  [x] highlevel.project needs to handle first creation (no file at project_path)
+  [x] unit testing
+  [x] analyse files to sync
 
-  [o]  saving/loading local project index (in highLevel)
-    
-  [ ]  highlevel.project needs to handle first creation (no file at project_path)
+  [o] apply changes to local/remote
+
   [ ]  uploading files to the remote
   [ ]  exclude 'ignore' paths from indexing
-  [ ]  unit testing
   [ ]  what happens when not connected?

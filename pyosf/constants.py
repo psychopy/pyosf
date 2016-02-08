@@ -14,3 +14,5 @@ APPLICATION_SCOPES = 'osf.full_write'
 from os import path
 home = path.expanduser("~")
 PYOSF_FOLDER = path.join(home, '.pyosf')
+
+SHA = "md5"  # could switch to "sha256"

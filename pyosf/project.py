@@ -7,7 +7,7 @@ try:
     from psychopy import logging
 except:
     import logging
-from pyosf import remote
+from pyosf import remote, local, sync
 import json
 
 PY3 = sys.version_info > (3,)
@@ -28,7 +28,7 @@ class Project(object):
     root_path : str
         The root of the folder where the local files are situated
 
-    osf : pyosf.remote.OSF_Project instance)
+    osf : pyosf.remote.OSFProject instance)
         The remote project that will be synchronised.
 
     """
@@ -38,10 +38,9 @@ class Project(object):
         self.osf = osf  # not needed if project_file exists
         # load the project file (if exists) for info about previous sync
         index, username, project_id, root_path = self.load(project_file)
-        self.index = index
+        self.index = index or []
         self.username = username
 
-        print(index, username, project_id, root_path)
         # check/set root_path
         if self.root_path is None:
             self.root_path = root_path  # use what we just loaded
@@ -51,6 +50,9 @@ class Project(object):
         if self.root_path is None:
             raise AttributeError("Project file failed to load a root_path "
                                  "for the local files and none was provided")
+        else:
+            self.local = local.LocalFiles(self.root_path)
+
         # check/set remote session
         if osf is None:
             if username is None:
@@ -58,12 +60,15 @@ class Project(object):
                                      "no username or authentication token")
             else:  # we have no remote but a username so try a remote.Session
                 session = remote.Session(username)
-
-
-#        elif username is None and remote
-#        # create a session
-#        if username is None and
-        self.local = None  # a local.LocalFiles object (to be indexed)
+                if project_id is None:
+                    raise AttributeError("No project id was available. "
+                                         "Project needs OSFProject or a "
+                                         "previous project_file")
+                else:
+                    self.osf = remote.OSFProject(session=session,
+                                                 id=project_id)
+        else:
+            self.osf = osf
 
     def __repr__(self):
         return "Project({})".format(self.project_file)
@@ -139,17 +144,10 @@ class Project(object):
             root_path = d['root_path']
         return index, username, project_id, root_path
 
-    def sync(self):
-        pass
-        # todo
-
-if __name__ == "__main__":
-    print(os.path.dirname(__file__))
-    proj_path = os.path.join(os.path.dirname(__file__), 'tmp/test.proj')
-    this_session = remote.Session(username='jon@peirce.org.uk',
-                                  password='aTestPassword')
-    osf_proj = this_session.open_project('qgt58')
-    proj = Project(project_file=proj_path,
-                   root_path="tmp", osf=osf_proj)
-    proj.save()
-
+    def get_changes(self):
+        """Return the changes to be applied
+        """
+        osf_index = self.osf.create_index()
+        local_index = self.local.create_index()
+        changes = sync.get_changes(local_index, osf_index, self.index)
+        return changes
