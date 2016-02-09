@@ -103,10 +103,10 @@ class Session(requests.Session):
     def search_project_names(self, search_str, tags="psychopy"):
         """
         """
-        psychopyProjs = self.session.get("{}/nodes/?filter[tags]=coder"
-                                         .format(constants.API_BASE))
+        projs = self.get("{}/nodes/?filter[tags]={}"
+                                 .format(constants.API_BASE, tags))
 
-        return psychopyProjs.json()
+        return projs.json()['data']
 
     def find_users(self, search_str):
         """Find user IDs whose name matches a given search string

@@ -27,12 +27,18 @@ class TestSession(object):
             full_name = user['full_name']
             user_id = user['id']
             if printing:
-                print("Found OSF user {} with id={}".format(full_name, user_id))
+                print("Found OSF user {} with id={}"
+                      .format(full_name, user_id))
                 print("Projects:")
             userProjects = self.session.find_user_projects(user_id)
             for proj in userProjects:
                 if printing:
                     print(" - {}: {}".format(proj['id'], proj['title']))
+
+    def test_search_projects(self):
+        projs = self.session.search_project_names('Is it just motion')
+        assert len(projs > 0)
+        print("Found projects by name : {}".format(projs))
 
     def test_search_me(self):
         print("Finding projects for 'me' ({})".format(self.session.username))
@@ -53,7 +59,6 @@ class TestSession(object):
         # look at some file objects for proj
         print(repr(proj), proj.title, "files:")
         file_list = proj.create_index()
-        print("nFiles: {}".format(len(file_list)))
         for n, this_file in enumerate(file_list):
             if n > 5:
                 print('...')
