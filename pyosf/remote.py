@@ -15,7 +15,7 @@ import datetime
 try:
     from psychopy import logging
     console = logging.console
-except:
+except ImportError:
     import logging
     console = logging.getLogger()
 from . import constants
@@ -102,9 +102,20 @@ class Session(requests.Session):
 
     def search_project_names(self, search_str, tags="PsychoPy"):
         """
+        Parameters
+        ----------
+        search_str : str
+            The string to search for in the title of the project
+        tags : str
+            Comma-separated string containing tags (currently case-sensitive)
+
+        Returns
+        -------
+        A list of OSFProject objects
+
         """
         reply = self.get("{}/nodes/?filter[tags]={}"
-                                 .format(constants.API_BASE, tags)).json()
+                         .format(constants.API_BASE, tags)).json()
         projs = []
         for entry in reply['data']:
             projs.append(OSFProject(session=self, id=entry))
@@ -239,6 +250,20 @@ class Session(requests.Session):
             self.token = json_resp['data']['attributes']['token_id']
             return 1
 
+    def download_file(self, file_id, local_path):
+        """ Download a file with given objetc id
+
+        Parameters
+        ----------
+
+        file_id : str
+            The OSF id for the file
+        local_path : str
+            The full path where the file will be downloaded
+
+        """
+        FileNode(self, file_id).download(local_path)
+
 
 class Node(object):
     """The Node is an abstract class defined by OSF that could be a project
@@ -284,6 +309,12 @@ class Node(object):
         return json.dumps(self.json, sort_keys=True, indent=4)
 
     @property
+    def title(self):
+        """The title of this node/project
+        """
+        return self.json['attributes']['title']
+
+    @property
     def kind(self):
         """Kind of object ('file' or 'folder')
         """
@@ -296,10 +327,10 @@ class Node(object):
         return self.json['attributes']
 
     @property
-    def title(self):
-        """The title of this node/project
+    def links(self):
+        """The links are the URLs the node has to download, upload etc
         """
-        return self.json['attributes']['title']
+        return self.json['links']
 
     @property
     def children(self):
@@ -338,6 +369,7 @@ class Node(object):
         for entry in reply:
             f = FileNode(self.session, entry)
             d = {}
+            d['id'] = f.id
             d['kind'] = f.kind
             d['path'] = f.path
             d['name'] = f.name
@@ -368,7 +400,7 @@ class Node(object):
         return file_list
 
 
-class FileNode(object):
+class FileNode(Node):
     """A Python object to handle file nodes in the OSF database
     This is sufficiently different in its attribtues from normal nodes
     that it shouldn't inherit.
@@ -382,23 +414,17 @@ class FileNode(object):
         Storing the fields from an OSF File Node
 
     """
-    def __init__(self, session, json_data):
+    def __init__(self, session, id):
         """Initialise with the request(url).json()['data']
         """
-        self.session = session
-        self.json = json_data
+        Node.__init__(self, session, id)
+        self.id = id
 
     @property
     def name(self):
         """Name of this file
         """
         return self.json['attributes']['name']
-
-    @property
-    def id(self):
-        """Unique identifier in OSF
-        """
-        return self.json['id']
 
     @property
     def kind(self):
@@ -429,12 +455,6 @@ class FileNode(object):
         return self.json['files']
 
     @property
-    def links(self):
-        """The links are the URLs the node has to download, upload etc
-        """
-        return self.json['links']
-
-    @property
     def info(self):
         infoLink = self.links['info']
         reply = self.session.get(infoLink)
@@ -463,11 +483,7 @@ class FileNode(object):
         else:
             return None
 
-    @property
-    def attributes(self):
-        return self.json['attributes']
-
-    def download(self, target_folder):
+    def download(self, target_path):
         """Download this file to the target folder
 
         Parameters
@@ -478,9 +494,8 @@ class FileNode(object):
         """
         URL = self.links['download']
         r = self.session.get(URL, stream=True)
-        file_path = os.path.join(target_folder, self.name)
         if r.status_code == 200:
-            with open(file_path, 'wb') as f:
+            with open(target_path, 'wb') as f:
                 for chunk in r.iter_content(1024):
                     f.write(chunk)
 
@@ -501,24 +516,4 @@ class OSFProject(Node):
     def __repr__(self):
         return "OSF_Project(%r)" % (self.id)
 
-    def downloadAll(self, local_path=None):
-        for file_node in self.file_list:
-            file_node.download(target_folder=local_path)
 
-
-if __name__ == "__main__":
-    # set up logging to give more info
-    console.setLevel(logging.DEBUG)
-    # set up session with full info
-    tokens = TokenStorage()
-    if 'jon@peirce.org.uk' in tokens:
-        del tokens['jon@peirce.org.uk']
-        tokens.save()
-    session = Session(username='jon@peirce.org.uk', password='aTestPassword')
-    print("Success with username and password")
-    # should now be able to use username only
-    session = Session(username='jon@peirce.org.uk')
-    print("Success with username only (stored token)")
-
-    if hasattr(logging, 'flush'):
-        logging.flush()  # psychopy.logging needs manual flush

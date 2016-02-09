@@ -8,10 +8,13 @@ Created on Sun Feb  7 21:31:15 2016
 @author: lpzjwp
 """
 from __future__ import absolute_import, print_function
-
-from os.path import splitext
 from .constants import SHA
 import copy
+import os
+try:
+    from psychopy import logging
+except ImportError:
+    import logging
 
 """
 Resolutions table
@@ -72,36 +75,68 @@ class Changes(object):
         self.mv_index = {}
         self.update_index = {}
 
-    def add_local(self, asset, new_path=None):
+    def apply_add_local(self, proj, asset, new_path=None):
+        full_path = os.path.join(proj.local.root_path, new_path)
+
+        # handle folders
+        if asset['kind'] == "folder":
+            if os.path.isdir(full_path):
+                return 1  # the folder may have been created implicitly already
+            else:
+                os.makedirs(full_path)
+
+        # this is a file
+        folder_path, filename = os.path.split(full_path)
+        if not os.path.isdir(folder_path):
+            os.makedirs(folder_path)
+        proj.osf.session.download_file(asset['id'], full_path)
+        logging.info("Added local file: {}".format(full_path))
+        if hasattr(logging, 'flush'):
+            logging.flush()
+
+    def apply_add_remote(self, proj, asset, new_path=None):
         pass  # TODO:
 
-    def add_remote(self, asset, new_path=None):
+    def apply_add_index(self, proj, asset, new_path=None):
         pass  # TODO:
 
-    def add_index(self, asset, new_path=None):
-        pass  # TODO:
-
-    def mv_local(self, asset, new_path):
+    def apply_mv_local(self, proj, asset, new_path):
         pass  # TODO: # NB asset will have old path
 
-    def mv_remote(self, asset, new_path):
+    def apply_mv_remote(self, proj, asset, new_path):
         pass  # TODO:  # NB asset will have old path
 
-    def mv_index(self, asset, new_path):
+    def apply_mv_index(self, proj, asset, new_path):
         pass  # TODO:  # NB asset will have old path
 
-    def del_local(self, asset):
+    def apply_del_local(self, proj, asset, new_path=None):
         pass  # TODO:
 
-    def del_remote(self, asset):
+    def apply_del_remote(self, proj, asset, new_path=None):
         pass  # TODO:
 
-    def del_index(self, asset):
+    def apply_del_index(self, proj, asset, new_path=None):
         pass  # TODO:
 
-    def apply(self):
+    def apply_update_local(self, proj, asset):
         pass  # TODO:
-        # NB remember to perform all delete ops first
+
+    def apply_update_remote(self, proj, asset):
+        pass  # TODO:
+
+    def apply_update_index(self, proj, asset):
+        pass  # TODO:
+
+    def apply(self, proj):
+        """Apply the changes using the given remote.Session object
+        """
+        # would it be wise to perform del operations before others?
+        for action_type in dir(self):
+            if "apply_{}".format(action_type) in dir(self):
+                func_apply = getattr(self, "apply_{}".format(action_type))
+                for new_path, asset in getattr(self, action_type).items():
+                    func_apply(proj, asset, new_path)
+
         self._set_empty()
 
 
@@ -109,14 +144,14 @@ def recreated_path(path):
     """If we have to add a file back (that was deleted) then add RECREATED to
     the name
     """
-    root, ext = splitext(path)
+    root, ext = os.path.splitext(path)
     return root+"_DELETED."+ext
 
 
 def conflict_paths(path, local_time, server_time):
     """
     """
-    root, ext = splitext(path)
+    root, ext = os.path.splitext(path)
     local = "{}_CONFLICT{}.{}".format(root, local_time, ext)
     server = "{}_CONFLICT{}.{}".format(root, server_time, ext)
     return local, server

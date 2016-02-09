@@ -9,6 +9,7 @@ from __future__ import absolute_import, print_function
 from pyosf import remote, project
 import time
 import os
+import gc
 
 this_dir, filename = os.path.split(__file__)
 proj_file = os.path.join(this_dir, "tmp", "test.proj")
@@ -27,19 +28,29 @@ def test_open_project():
     changes = proj.get_changes()
     t1 = time.time()
     print("Indexing and finding diffs took {:.3f}s".format(t1-t0))
-    print(changes)
-    print("Add local:")
-    for f in changes.add_local.keys():
-        print(" - {}".format(f))
-    print("Add remote:")
-    for f in changes.add_remote.keys():
-        print(" - {}".format(f))
-    changes.apply()
+    print(changes)  # prints a prettified table
+    t2 = time.time()
+    print("Applying changes")
+    changes.apply(proj)
+    t3 = time.time()
+    print("Applying changes took {:.3f}s".format(t3-t2))
+    # check that nothing else has created a ref to changes (no circular)
+    print("{} current references to Changes object (should be 1)"
+          .format(gc.get_referrers(changes)))
+
     proj.save()
     # having saved it we can test that it reloads without user/password
     proj = project.Project(project_file=proj_file)
+    changes = proj.get_changes()
 
 
 if __name__ == "__main__":
+    try:
+        from psychopy import logging
+        console = logging.console
+    except ImportError:
+        import logging
+        console = logging.getLogger()
+    console.setLevel(logging.INFO)
     import pytest
     pytest.main(args=[__file__, '-s'])
