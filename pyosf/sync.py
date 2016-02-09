@@ -47,6 +47,11 @@ def dict_from_list(in_list, key):
 class Changes(object):
 
     def __init__(self):
+        # create the attributes to store changes
+        self._change_lists = []
+        for action in ['del','add','mv','update']:
+            for target in ['local','remote','index']:
+                self._change_lists.append("{}_{}".format(action, target))
         self._set_empty()
 
     def __str__(self):
@@ -62,18 +67,8 @@ class Changes(object):
         return s
 
     def _set_empty(self):
-        self.add_local = {}
-        self.del_local = {}
-        self.mv_local = {}   # mv is rename
-        self.update_local = {}
-        self.add_remote = {}
-        self.del_remote = {}
-        self.mv_remote = {}
-        self.update_remote = {}
-        self.add_index = {}
-        self.del_index = {}
-        self.mv_index = {}
-        self.update_index = {}
+        for attrib_name in self._change_lists:
+            setattr(self, attrib_name, {})
 
     def apply_add_local(self, proj, asset, new_path=None):
         full_path = os.path.join(proj.local.root_path, new_path)
@@ -131,11 +126,10 @@ class Changes(object):
         """Apply the changes using the given remote.Session object
         """
         # would it be wise to perform del operations before others?
-        for action_type in dir(self):
-            if "apply_{}".format(action_type) in dir(self):
-                func_apply = getattr(self, "apply_{}".format(action_type))
-                for new_path, asset in getattr(self, action_type).items():
-                    func_apply(proj, asset, new_path)
+        for action_type in self._change_lists:
+            func_apply = getattr(self, "apply_{}".format(action_type))
+            for new_path, asset in getattr(self, action_type).items():
+                func_apply(proj, asset, new_path)
 
         self._set_empty()
 
@@ -273,6 +267,7 @@ def get_changes(local, remote, index):
             if remote_asset[SHA] == local_asset[SHA]:
                 # both copies match but not in index (user manually uplaoded?)
                 changes.add_index[path] = local_asset
+            del remote_p[path]
         else:
             # code:010
             changes.add_index[path] = local_asset

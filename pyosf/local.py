@@ -1,10 +1,10 @@
 
 from __future__ import absolute_import, print_function
 import os
-import sys
 from datetime import datetime
 import json
 import hashlib
+from . import constants
 
 
 class LocalFiles(object):
@@ -12,7 +12,7 @@ class LocalFiles(object):
         # these should be reset when the path is set
         self.nFiles = 0
         self.nFolders = 0
-        self.md5_list = []
+        self.sha_list = []
         # this should trigger the work to be done
         self.root_path = root_path
 
@@ -41,7 +41,9 @@ class LocalFiles(object):
             d['full_path'] = path
             d['path'] = os.path.relpath(path, self.root_path)
             d['kind'] = "file"
-            d['md5'] = hashlib.md5(path).hexdigest()
+            with open(path, "rb") as f:
+                hash_func = getattr(hashlib, constants.SHA.lower())
+                d[constants.SHA] = hash_func(f.read()).hexdigest()
             d['date_modified'] = datetime.fromtimestamp(os.path.getmtime(path)
                                                         ).isoformat()
             self.nFiles += 1
@@ -68,4 +70,3 @@ class LocalFiles(object):
         """
         with open(filename, 'wb') as f:
             json.dump(self.index, f, indent=4)
-
