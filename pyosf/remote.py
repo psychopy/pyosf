@@ -6,7 +6,7 @@
 # in https://github.com/CenterForOpenScience/osf-sync/blob/develop/...
 #    /osfoffline/utils/authentication.py
 
-from __future__ import absolute_import, printing_function
+from __future__ import absolute_import, print_function
 import os
 import sys
 import requests
