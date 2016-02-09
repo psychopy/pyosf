@@ -100,13 +100,15 @@ class Session(requests.Session):
         except:
             return None
 
-    def search_project_names(self, search_str, tags="psychopy"):
+    def search_project_names(self, search_str, tags="PsychoPy"):
         """
         """
-        projs = self.get("{}/nodes/?filter[tags]={}"
-                                 .format(constants.API_BASE, tags))
-
-        return projs.json()['data']
+        reply = self.get("{}/nodes/?filter[tags]={}"
+                                 .format(constants.API_BASE, tags)).json()
+        projs = []
+        for entry in reply['data']:
+            projs.append(OSFProject(session=self, id=entry))
+        return projs
 
     def find_users(self, search_str):
         """Find user IDs whose name matches a given search string
@@ -128,10 +130,8 @@ class Session(requests.Session):
         reply = self.get("{}/users/{}/nodes?filter[category]=project"
                          .format(constants.API_BASE, user_id)).json()
         projs = []
-        for thisProj in reply['data']:
-            attrs = thisProj['attributes']
-            attrs['id'] = thisProj['id']
-            projs.append(attrs)
+        for entry in reply['data']:
+            projs.append(OSFProject(session=self, id=entry))
         return projs
 
     def find_my_projects(self):
@@ -252,14 +252,21 @@ class Node(object):
     ----------
 
     session : a Session object
-    id : the project/node id in open science framework
+    id : str or dict
+        This can be the project/node ID in open science framework, in which
+        case the info will be fetched for that Node.
+        Or it can be the json data for that Node directly (if that has been
+        retrieved already)
 
     """
     def __init__(self, session, id):
         if session is None:
             session = Session()  # create a default (anonymous Session)
         self.session = session
-        if id.startswith('http'):
+        if type(id) is dict:
+            self.json = id
+            id = self.json['id']
+        elif id.startswith('http'):
             # treat as URL. Extract the id from the request data
             req = self.session.get(id)
             self.json = req.json()['data']

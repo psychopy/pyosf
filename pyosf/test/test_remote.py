@@ -33,11 +33,10 @@ class TestSession(object):
             userProjects = self.session.find_user_projects(user_id)
             for proj in userProjects:
                 if printing:
-                    print(" - {}: {}".format(proj['id'], proj['title']))
+                    print(" - {}: {}".format(proj.id, proj.title))
 
     def test_search_projects(self):
         projs = self.session.search_project_names('Is it just motion')
-        assert len(projs > 0)
         print("Found projects by name : {}".format(projs))
 
     def test_search_me(self):
@@ -45,7 +44,7 @@ class TestSession(object):
         userProjects = self.session.find_user_projects()
         for proj in userProjects:
             if printing:
-                print(" - {}: {}".format(proj['id'], proj['title']))
+                print(" - {}: {}".format(proj.id, proj.title))
 
     def test_file_listing(self):
         proj_id = 'qgt58'
@@ -65,7 +64,6 @@ class TestSession(object):
                 break
             print(' - ', this_file['name'], this_file['kind'],
                   this_file['size'], this_file['path'])
-            print("  links:", this_file['links'])
 
 if __name__ == "__main__":
     import pytest
