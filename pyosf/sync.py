@@ -49,8 +49,8 @@ class Changes(object):
     def __init__(self):
         # create the attributes to store changes
         self._change_lists = []
-        for action in ['del','add','mv','update']:
-            for target in ['local','remote','index']:
+        for action in ['del', 'add', 'mv', 'update']:
+            for target in ['local', 'remote', 'index']:
                 self._change_lists.append("{}_{}".format(action, target))
         self._set_empty()
 
@@ -81,46 +81,71 @@ class Changes(object):
                 os.makedirs(full_path)
 
         # this is a file
-        folder_path, filename = os.path.split(full_path)
-        if not os.path.isdir(folder_path):
-            os.makedirs(folder_path)
+        container, filename = os.path.split(full_path)
+        if not os.path.isdir(container):
+            os.makedirs(container)
         proj.osf.session.download_file(asset['id'], full_path)
-        logging.info("Added local file: {}".format(full_path))
+        logging.info("Added file to local: {}".format(full_path))
+        if hasattr(logging, 'flush'):
+            logging.flush()
+        return 1
+
+    def apply_add_remote(self, proj, asset, new_path=None):
+        if new_path in proj.osf.containers:
+            # this has already handled (e.g. during prev file upload)
+            return 1
+        print('Attempting to create {!r} ({})'.format(new_path, asset['kind']))
+        if asset['kind'] == 'folder':
+            proj.osf.add_container(asset['path'], kind='folder')
+        else:
+            proj.osf.add_file(asset)
+
+        logging.info("Added file to remote: {}".format(new_path))
+        if hasattr(logging, 'flush'):
+            logging.flush()
+        return 1
+
+    def apply_add_index(self, proj, asset, new_path=None):
+        proj.index.append(asset)
+        logging.info("Added file to index: {}".format(asset['path']))
         if hasattr(logging, 'flush'):
             logging.flush()
 
-    def apply_add_remote(self, proj, asset, new_path=None):
-        pass  # TODO:
-
-    def apply_add_index(self, proj, asset, new_path=None):
-        pass  # TODO:
-
     def apply_mv_local(self, proj, asset, new_path):
         pass  # TODO: # NB asset will have old path
+        return 1
 
     def apply_mv_remote(self, proj, asset, new_path):
         pass  # TODO:  # NB asset will have old path
+        return 1
 
     def apply_mv_index(self, proj, asset, new_path):
         pass  # TODO:  # NB asset will have old path
+        return 1
 
     def apply_del_local(self, proj, asset, new_path=None):
         pass  # TODO:
+        return 1
 
     def apply_del_remote(self, proj, asset, new_path=None):
         pass  # TODO:
+        return 1
 
     def apply_del_index(self, proj, asset, new_path=None):
         pass  # TODO:
+        return 1
 
     def apply_update_local(self, proj, asset):
         pass  # TODO:
+        return 1
 
     def apply_update_remote(self, proj, asset):
         pass  # TODO:
+        return 1
 
     def apply_update_index(self, proj, asset):
         pass  # TODO:
+        return 1
 
     def apply(self, proj):
         """Apply the changes using the given remote.Session object
@@ -233,8 +258,8 @@ def get_changes(local, remote, index):
                 changes.add_local[new_path] = new_asset
             else:
                 # deleted locally unchanged remotely. Delete in both
-                changes.rem_index[asset['path']] = asset
-                changes.rem_remote[asset['path']] = asset
+                changes.del_index[asset['path']] = asset
+                changes.del_remote[asset['path']] = asset
             del remote_p[path]  # remove so we don't re-analyze
 
         elif path not in remote_p.keys():
@@ -254,8 +279,8 @@ def get_changes(local, remote, index):
                 changes.add_remote[new_path] = new_asset
             else:
                 # deleted remotely unchanged locally. Delete in both
-                changes.rem_index[asset['path']] = asset
-                changes.rem_local[asset['path']] = asset
+                changes.del_index[asset['path']] = asset
+                changes.del_local[asset['path']] = asset
             del local_p[path]  # remove so we don't re-analyse
 
     # go through the files in the local

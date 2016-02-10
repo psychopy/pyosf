@@ -18,13 +18,19 @@ try:
 except ImportError:
     import logging
     console = logging.getLogger()
-from . import constants
+from pyosf import constants
 
 PY3 = sys.version_info > (3,)
 
 
 class AuthError(Exception):
     """Authentication error while connecting to the OSF"""
+    pass
+
+
+class HTTPSError(Exception):
+    """Error connecting to web resource
+    """
     pass
 
 
@@ -95,12 +101,11 @@ class Session(requests.Session):
     def open_project(self, proj_id):
         """Returns a OSF_Project object or None (if that id couldn't be opened)
         """
-        try:
-            return OSFProject(session=self, id=proj_id)
-        except:
-            return None
+        return OSFProject(session=self, id=proj_id)
+#        except:
+#            return None
 
-    def search_project_names(self, search_str, tags="PsychoPy"):
+    def search_project_names(self, search_str, tags="psychopy"):
         """
         Parameters
         ----------
@@ -114,7 +119,7 @@ class Session(requests.Session):
         A list of OSFProject objects
 
         """
-        reply = self.get("{}/nodes/?filter[tags]={}"
+        reply = self.get("{}/nodes/?filter[tags][icontains]={}"
                          .format(constants.API_BASE, tags)).json()
         projs = []
         for entry in reply['data']:
@@ -288,18 +293,26 @@ class Node(object):
         if session is None:
             session = Session()  # create a default (anonymous Session)
         self.session = session
+
         if type(id) is dict:
             self.json = id
             id = self.json['id']
         elif id.startswith('http'):
             # treat as URL. Extract the id from the request data
-            req = self.session.get(id)
-            self.json = req.json()['data']
+            reply = self.session.get(id)
+            self.json = reply.json()['data']
         else:
             # treat as OSF id and fetch the URL
-            req = self.session.get("{}/nodes/{}/".format(constants.API_BASE,
-                                   id))
-            self.json = req.json()['data']
+            reply = self.session.get("{}/nodes/{}/"
+                                     .format(constants.API_BASE, id))
+            self.json = reply.json()['data']
+        # also get info about files if possible
+        files_reply = self.session.get("{}/nodes/{}/files"
+                                       .format(constants.API_BASE, id))
+        if files_reply.status_code == 200:
+            for provider in files_reply.json()['data']:
+                if provider['attributes']['name'] == 'osfstorage':
+                    self.json['links'].update(provider['links'])
         self.id = id
 
     def __repr__(self):
@@ -393,10 +406,9 @@ class Node(object):
         # process child nodes first
         [file_list.extend(this_child.create_index())
             for this_child in self.children]
-
+        #then process this Node
         file_list.extend(self._node_file_list("{}/nodes/{}/files/osfstorage"
                          .format(constants.API_BASE, self.id)))
-
         return file_list
 
 
@@ -512,8 +524,89 @@ class OSFProject(Node):
     """
     def __init__(self, session, id):
         Node.__init__(self, session, id)
-
+        self.containers = {}  # a dict of Nodes and folders to contain files
+        self.path = ""  # provided for consistency with FileNode
+        self.name = ""  # provided for consistency with FileNode
     def __repr__(self):
         return "OSF_Project(%r)" % (self.id)
 
 
+    def create_index(self):
+        """Returns a flat list of all files from this node down
+        """
+        file_list = Node.create_index(self)  # Node does the main leg work
+        # for Project, find all folders and add them to their own index
+        self.containers = {}
+        for entry in file_list:
+            if entry['kind'] == 'folder':
+                self.containers[entry['path']] = entry
+        # now we can give containers 'modified dates' based on contents
+        for path, entry in self.containers:
+            modified = '0'
+            for asset in file_list:
+                if asset['path'].startswith(path):
+                    if asset['date_modified'] > modified:
+                        modified = asset['date_modified']
+            entry['date_modified'] = modified
+        return file_list
+
+    def add_container(self, path, kind='folder'):
+        """Adds a container (currently only a folder) recursively.
+
+        If the previous container was a folder or node it doesn't matter; they
+        are treated equivalently here.
+        """
+        # TODO: handle requests for a node instead of folder?
+        # TODO: what if a node and a folder have the same name?
+        if path in self.containers:
+            return self.containers[path] # nothing to do, return the container
+
+        container_path, name = os.path.split(path)
+        if container_path == "":  # we reached the root of the node
+            url_create = self.links['new_folder']
+            node = self
+        else:
+            if container_path not in self.containers:
+                container = self.add_container(container_path)
+                url_create = container['links']['new_folder']
+            else:
+                container = self.containers[container_path]
+            url = "{}&name={}".format(url_create, name)
+            reply = self.session.put(url)
+            if reply.status_code != 200:
+                raise HTTPSError("URL:{}\nreply:{}"
+                                 .format(url, json.dumps(reply.json(), indent=2)))
+            node = FileNode(self.session, reply.json()['data'])
+        asset = {}
+        asset['id'] = node.id
+        asset['kind'] = node.kind
+        asset['path'] = node.path
+        asset['name'] = node.name
+        asset['links'] = node.links
+        self.containers[path] = asset
+        return asset
+
+    def add_file(self, asset):
+        """Adds the file to the OSF project.
+        If containing folder doesn't exist then it will be created recursively
+        """
+        container, name = os.path.split(asset['path'])
+        folder_asset = self.add_container(container)
+        url_upload = folder_asset['links']['upload']
+        url = "{}?kind=file&name={}".format(url_upload, name)
+        with open(asset['full_path'], 'rb') as f:
+            reply = self.session.put(url, data=f)
+        if reply.status_code not in [200, 201]:
+            raise HTTPSError("URL:{}\nreply:{}"
+                             .format(url, json.dumps(reply.json(), indent=2)))
+        node = FileNode(self.session, reply.json()['data'])
+        if asset[constants.SHA] != node.json['attributes']['extra']['hashes'][constants.SHA]:
+            raise Exception("Uploaded file did not match existing SHA. "
+                            "Maybe it didn't fully upload?")
+        return node
+
+
+if __name__ == "__main__":
+    import pytest
+    this_folder, filename = os.path.split(constants.__file__)
+    pytest.main(["tests/test_project.py", "-s"])

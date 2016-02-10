@@ -7,7 +7,7 @@
   [x] analyse files to sync
 
   [o] apply changes to local/remote
+  [o]  uploading files to the remote
 
-  [ ]  uploading files to the remote
   [ ]  exclude 'ignore' paths from indexing
   [ ]  what happens when not connected?

@@ -22,12 +22,14 @@ class LocalFiles(object):
         """
         if path is None:
             path = self.root_path
+        d = {}
+        d['full_path'] = path
+        d['path'] = os.path.relpath(path, self.root_path)
+        d['date_modified'] = datetime.fromtimestamp(os.path.getmtime(path)
+                                                    ).isoformat()
         if os.path.isdir(path):
             if path is not self.root_path:  # don't store root as a folder
-                d = {}
-                d['kind'] = "directory"
-                d['full_path'] = path
-                d['path'] = os.path.relpath(path, self.root_path)
+                d['kind'] = "folder"
                 files = [d]
                 self.nFolders += 1
             else:
@@ -37,15 +39,10 @@ class LocalFiles(object):
                 for x in os.listdir(path)]
             return files
         else:
-            d = {}
-            d['full_path'] = path
-            d['path'] = os.path.relpath(path, self.root_path)
             d['kind'] = "file"
             with open(path, "rb") as f:
                 hash_func = getattr(hashlib, constants.SHA.lower())
                 d[constants.SHA] = hash_func(f.read()).hexdigest()
-            d['date_modified'] = datetime.fromtimestamp(os.path.getmtime(path)
-                                                        ).isoformat()
             self.nFiles += 1
             return [d]
 

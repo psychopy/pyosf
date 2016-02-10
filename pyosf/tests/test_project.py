@@ -36,7 +36,7 @@ def test_open_project():
     print("Applying changes took {:.3f}s".format(t3-t2))
     # check that nothing else has created a ref to changes (no circular)
     print("{} current references to Changes object (should be 1)"
-          .format(gc.get_referrers(changes)))
+          .format(len(gc.get_referrers(changes))))
 
     proj.save()
     # having saved it we can test that it reloads without user/password
