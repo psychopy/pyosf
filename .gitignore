@@ -12,3 +12,4 @@ tmp
 tmp.json
 .coverage
 .cache
+.idea*

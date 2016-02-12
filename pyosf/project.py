@@ -33,7 +33,9 @@ class Project(object):
         The remote project that will be synchronised.
 
     """
-    def __init__(self, project_file=None, root_path=None, osf=None):
+    def __init__(self, project_file=None, root_path=None, osf=None,
+                 autosave=True):
+        self.autosave = autosave  # try to save file automatically on __del__
         self.project_file = project_file
         self.root_path = root_path  # overwrite previous (indexed) location
         self.osf = osf  # not needed if project_file exists
@@ -45,9 +47,11 @@ class Project(object):
         # check/set root_path
         if self.root_path is None:
             self.root_path = root_path  # use what we just loaded
-        elif root_path != self.root_path:
+        elif root_path not in [None, self.root_path]:
             logging.warn("The requested root_path and the previous root_path "
-                         "differ. Using the requested path.")
+                         "differ. Using the requested path."
+                         "given: {}"
+                         "stored: {}".format(root_path, self.root_path))
         if self.root_path is None:
             raise AttributeError("Project file failed to load a root_path "
                                  "for the local files and none was provided")
@@ -73,6 +77,9 @@ class Project(object):
 
     def __repr__(self):
         return "Project({})".format(self.project_file)
+
+    def __del__(self):
+        self.save()
 
     def save(self, proj_path=None):
         """Save the project to a json-format file
@@ -133,11 +140,11 @@ class Project(object):
         """
         if proj_path is None:
             proj_path = self.project_file
-        if not os.path.isfile(proj_path):
-            print('no file:{}'.format(os.path.abspath(proj_path)))
+        if not os.path.isfile(os.path.abspath(proj_path)):
+            print('no file: {}'.format(os.path.abspath(proj_path)))
             return (None, None, None, None)
         else:
-            with open(proj_path, 'r') as f:
+            with open(os.path.abspath(proj_path), 'r') as f:
                 d = json.load(f)
             username = d['username']
             index = d['index']

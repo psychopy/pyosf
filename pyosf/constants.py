@@ -8,7 +8,6 @@ Created on Mon Feb  1 18:56:01 2016
 API_BASE = 'https://api.osf.io/v2'
 
 PROJECT_NAME = 'pyosf'
-PROJECT_AUTHOR = 'psychopy'
 APPLICATION_SCOPES = 'osf.full_write'
 
 from os import path

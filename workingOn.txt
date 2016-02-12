@@ -5,9 +5,9 @@
   [x] highlevel.project needs to handle first creation (no file at project_path)
   [x] unit testing
   [x] analyse files to sync
+  [x] uploading files to the remote
 
   [o] apply changes to local/remote
-  [o]  uploading files to the remote
 
   [ ]  exclude 'ignore' paths from indexing
   [ ]  what happens when not connected?

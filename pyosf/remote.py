@@ -393,10 +393,11 @@ class Node(object):
                 d['sha256'] = f.sha256
                 d['size'] = f.size
                 d['date_modified'] = f.modified
-                file_list.append(d)
             elif f.kind == 'folder':
                 folder_url = f.links['move']
                 file_list.extend(self._node_file_list(folder_url))
+            if f.path not in ['', '/']:
+                file_list.append(d)
         return file_list
 
     def create_index(self):
@@ -406,7 +407,7 @@ class Node(object):
         # process child nodes first
         [file_list.extend(this_child.create_index())
             for this_child in self.children]
-        #then process this Node
+        # then process this Node
         file_list.extend(self._node_file_list("{}/nodes/{}/files/osfstorage"
                          .format(constants.API_BASE, self.id)))
         return file_list
@@ -495,6 +496,13 @@ class FileNode(Node):
         else:
             return None
 
+    @property
+    def sha(self):
+        if self.kind == "file":
+            return self.json['attributes']['extra']['hashes'][constants.SHA]
+        else:
+            return None
+
     def download(self, target_path):
         """Download this file to the target folder
 
@@ -527,9 +535,9 @@ class OSFProject(Node):
         self.containers = {}  # a dict of Nodes and folders to contain files
         self.path = ""  # provided for consistency with FileNode
         self.name = ""  # provided for consistency with FileNode
+
     def __repr__(self):
         return "OSF_Project(%r)" % (self.id)
-
 
     def create_index(self):
         """Returns a flat list of all files from this node down
@@ -541,11 +549,12 @@ class OSFProject(Node):
             if entry['kind'] == 'folder':
                 self.containers[entry['path']] = entry
         # now we can give containers 'modified dates' based on contents
-        for path, entry in self.containers:
+        for path, entry in self.containers.items():
             modified = '0'
             for asset in file_list:
                 if asset['path'].startswith(path):
-                    if asset['date_modified'] > modified:
+                    if 'date_modified' in asset and \
+                            asset['date_modified'] > modified:
                         modified = asset['date_modified']
             entry['date_modified'] = modified
         return file_list
@@ -556,10 +565,9 @@ class OSFProject(Node):
         If the previous container was a folder or node it doesn't matter; they
         are treated equivalently here.
         """
-        # TODO: handle requests for a node instead of folder?
         # TODO: what if a node and a folder have the same name?
         if path in self.containers:
-            return self.containers[path] # nothing to do, return the container
+            return self.containers[path]  # nothing to do, return the container
 
         container_path, name = os.path.split(path)
         if container_path == "":  # we reached the root of the node
@@ -574,8 +582,8 @@ class OSFProject(Node):
             url = "{}&name={}".format(url_create, name)
             reply = self.session.put(url)
             if reply.status_code != 200:
-                raise HTTPSError("URL:{}\nreply:{}"
-                                 .format(url, json.dumps(reply.json(), indent=2)))
+                raise HTTPSError("URL:{}\nreply:{}".format(url,
+                                 json.dumps(reply.json(), indent=2)))
             node = FileNode(self.session, reply.json()['data'])
         asset = {}
         asset['id'] = node.id
@@ -600,10 +608,42 @@ class OSFProject(Node):
             raise HTTPSError("URL:{}\nreply:{}"
                              .format(url, json.dumps(reply.json(), indent=2)))
         node = FileNode(self.session, reply.json()['data'])
-        if asset[constants.SHA] != node.json['attributes']['extra']['hashes'][constants.SHA]:
+        if asset[constants.SHA] != \
+                node.json['attributes']['extra']['hashes'][constants.SHA]:
             raise Exception("Uploaded file did not match existing SHA. "
                             "Maybe it didn't fully upload?")
         return node
+
+    def move_file(self, asset, new_path):
+        # ensure the target location exists
+        new_folder, new_name = os.path.split(asset['path'])
+        if new_folder not in self.containers:
+            folder_asset = self.add_container(new_folder)
+        # get the url and perform the move
+        url_move = asset['links']['move']
+        # TODO: for file to move to different node (rather than a folder within
+        # a node) we need to find the node id for that container (use links?)
+        body = """{"action":   "move",
+                "path":     {},
+                // optional
+                "rename":   {},
+                "conflict": "replace", // 'replace' or 'keep'
+                "resource": {}, // deflts to current {node_id}
+               }""".format(new_folder, new_name, folder_asset['id'])
+        reply = self.session.post(url_move, data=body)
+        if reply.status_code not in [200, 201]:
+            raise HTTPSError("Failed remote file move URL:{}\nreply:{}"
+                             .format(url_move,
+                                     json.dumps(reply.json(), indent=2)))
+        # TODO:  # check if move worked
+
+    def del_file(self, asset):
+        url_del = asset['links']['delete']
+        reply = self.session.delete(url_del)
+        if reply.status_code != 204:
+            raise HTTPSError("Failed remote file delete URL:{}\nreply:{}"
+                             .format(url_del,
+                                     json.dumps(reply.json(), indent=2)))
 
 
 if __name__ == "__main__":

@@ -11,6 +11,7 @@ from __future__ import absolute_import, print_function
 from .constants import SHA
 import copy
 import os
+import shutil
 try:
     from psychopy import logging
 except ImportError:
@@ -45,13 +46,15 @@ def dict_from_list(in_list, key):
 
 
 class Changes(object):
-
+    """This is essentially a dictionary of lists
+    """
     def __init__(self):
-        # create the attributes to store changes
-        self._change_lists = []
-        for action in ['del', 'add', 'mv', 'update']:
+        # create the names of the self attributes
+        # the actual attributes will be created during _set_empty
+        self._change_types = []
+        for action in ['del', 'mv', 'add', 'update']:
             for target in ['local', 'remote', 'index']:
-                self._change_lists.append("{}_{}".format(action, target))
+                self._change_types.append("{}_{}".format(action, target))
         self._set_empty()
 
     def __str__(self):
@@ -67,7 +70,7 @@ class Changes(object):
         return s
 
     def _set_empty(self):
-        for attrib_name in self._change_lists:
+        for attrib_name in self._change_types:
             setattr(self, attrib_name, {})
 
     def apply_add_local(self, proj, asset, new_path=None):
@@ -94,49 +97,62 @@ class Changes(object):
         if new_path in proj.osf.containers:
             # this has already handled (e.g. during prev file upload)
             return 1
-        print('Attempting to create {!r} ({})'.format(new_path, asset['kind']))
         if asset['kind'] == 'folder':
             proj.osf.add_container(asset['path'], kind='folder')
         else:
             proj.osf.add_file(asset)
-
         logging.info("Added file to remote: {}".format(new_path))
-        if hasattr(logging, 'flush'):
-            logging.flush()
         return 1
 
     def apply_add_index(self, proj, asset, new_path=None):
-        proj.index.append(asset)
-        logging.info("Added file to index: {}".format(asset['path']))
-        if hasattr(logging, 'flush'):
-            logging.flush()
+#         proj.index.append(asset)
+#         logging.info("Added file to index: {}".format(asset['path']))
+        return 1
 
     def apply_mv_local(self, proj, asset, new_path):
-        pass  # TODO: # NB asset will have old path
+        full_path_new = os.path.join(proj.local.root_path, new_path)
+        full_path_old = os.path.join(proj.local.root_path, asset['path'])
+        shutil.move(full_path_old, full_path_new)
+        asset['path'] = new_path
+        logging.info("Moved file locally: {} -> {}"
+                     .format(asset['path'], new_path))
         return 1
 
     def apply_mv_remote(self, proj, asset, new_path):
-        pass  # TODO:  # NB asset will have old path
+        new_folder, new_name = os.path.split(new_path)
+        proj.osf.move_file(asset, new_path)
         return 1
 
     def apply_mv_index(self, proj, asset, new_path):
-        pass  # TODO:  # NB asset will have old path
+        # for the index replacing with the new asset is the same as moving
+#        self.apply_update_index(proj, asset, new_path)
         return 1
 
     def apply_del_local(self, proj, asset, new_path=None):
-        pass  # TODO:
+        full_path = os.path.join(proj.local.root_path, new_path)
+        if os.path.isfile(full_path):  # might have been removed already?
+            os.remove(full_path)
+        if os.path.isdir(full_path):  # might have been removed already?
+            os.rmdir(full_path)
+        logging.info("Removed file locally: {}".format(asset['path']))
         return 1
 
     def apply_del_remote(self, proj, asset, new_path=None):
-        pass  # TODO:
+        proj.osf.del_file(asset)
         return 1
 
     def apply_del_index(self, proj, asset, new_path=None):
-        pass  # TODO:
+#        proj.index.remove(asset)
+#        logging.info("Removed file from index: {}".format(asset['path']))
         return 1
 
     def apply_update_local(self, proj, asset):
-        pass  # TODO:
+        full_path = os.path.join(proj.local.root_path, asset['path'])
+        # remove previous copy of file
+        if os.path.isfile(full_path):  # might have been removed already?
+            os.remove(full_path)
+        # then fetch new one from remote
+        proj.osf.session.download_file(asset['id'], full_path)
         return 1
 
     def apply_update_remote(self, proj, asset):
@@ -144,18 +160,35 @@ class Changes(object):
         return 1
 
     def apply_update_index(self, proj, asset):
-        pass  # TODO:
+        # remove the asset with that path and add new asset to proj.index
+#        path = asset['path']
+#        index = proj.index
+#        # use a python "generator expression" to find old asset
+#        old_asset = (item for item in index if item["path"] == path).next()
+#        proj.index.remove(old_asset)
+#        proj.index.append(asset)
         return 1
 
     def apply(self, proj):
         """Apply the changes using the given remote.Session object
         """
         # would it be wise to perform del operations before others?
-        for action_type in self._change_lists:
+        for action_type in self._change_types:
+            action_dict = getattr(self, action_type)
+            path_list = action_dict.keys()
+            # sort by path
+            if action_type[:3] in ['del', 'mv_']:
+                reverse = True  # so folders deleted last
+            else:
+                reverse = False  # so folders created first
+            path_list.sort(reverse=reverse)
+            # get the self.apply___() function to be applied
             func_apply = getattr(self, "apply_{}".format(action_type))
-            for new_path, asset in getattr(self, action_type).items():
+            for new_path in path_list:
+                asset = action_dict[new_path]
                 func_apply(proj, asset, new_path)
-
+        #when local/remote updates are complete refresh index based on local
+        proj.index = proj.local.create_index()
         self._set_empty()
 
 
@@ -194,7 +227,10 @@ def get_changes(local, remote, index):
             local_asset = local_p[path]
             remote_asset = remote_p[path]
 
-            if asset[SHA] == remote_asset[SHA] and \
+            if asset['kind'] == 'folder':
+                pass  # for folders we need to check contents not folder itself
+
+            elif asset[SHA] == remote_asset[SHA] and \
                     asset[SHA] == local_asset[SHA]:
                 # all copies match. Go and have a cup of tea.
                 pass
@@ -240,26 +276,26 @@ def get_changes(local, remote, index):
         elif path not in remote_p.keys() and path not in local_p.keys():
             # code:100
             # Was deleted in both. Safe to remove from index
-            changes.del_index(asset)
+            changes.del_index[path] = asset
 
         elif path not in local_p.keys():
+            remote_asset = remote_p[path]
             # code:101 has been deleted locally but exists remotely
             if asset['date_modified'] < remote_p[path]['date_modified']:
                 # deleted locally but changed on remote. Recreate
                 # make new path and get the newer asset info
                 new_path = recreated_path(path)
-                new_asset = remote_p[path]
                 # remote: rename (move) to include "_DELETED"
-                changes.mv_remote[new_path] = new_asset
+                changes.mv_remote[new_path] = remote_asset
                 # index: remove old asset and add new one
                 changes.del_index[asset['path']] = asset
-                changes.add_index[new_path] = new_asset
+                changes.add_index[new_path] = remote_asset
                 # local: just add the new asset with new path
-                changes.add_local[new_path] = new_asset
+                changes.add_local[new_path] = remote_asset
             else:
                 # deleted locally unchanged remotely. Delete in both
                 changes.del_index[asset['path']] = asset
-                changes.del_remote[asset['path']] = asset
+                changes.del_remote[asset['path']] = remote_asset
             del remote_p[path]  # remove so we don't re-analyze
 
         elif path not in remote_p.keys():
