@@ -176,7 +176,7 @@ class Changes(object):
         # would it be wise to perform del operations before others?
         for action_type in self._change_types:
             action_dict = getattr(self, action_type)
-            path_list = action_dict.keys()
+            path_list = list(action_dict.keys())  # for Python3 convert to list
             # sort by path
             if action_type[:3] in ['del', 'mv_']:
                 reverse = True  # so folders deleted last
@@ -188,7 +188,7 @@ class Changes(object):
             for new_path in path_list:
                 asset = action_dict[new_path]
                 func_apply(proj, asset, new_path)
-        #when local/remote updates are complete refresh index based on local
+        # when local/remote updates are complete refresh index based on local
         proj.index = proj.local.create_index()
         self._set_empty()
 

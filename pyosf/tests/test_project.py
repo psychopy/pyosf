@@ -10,6 +10,7 @@ from pyosf import remote, project
 import time
 import os
 import gc
+import shutil
 
 this_dir, filename = os.path.split(__file__)
 proj_file = os.path.join(this_dir, "tmp", "test.proj")
@@ -17,6 +18,9 @@ proj_root = os.path.join(this_dir, "tmp", "files")
 
 if os.path.isfile(proj_file):
     os.remove(proj_file)  # start with no project file (test creation)
+
+if os.path.isdir(proj_root):
+    shutil.rmtree(proj_root)  # start with no project file (test creation)
 
 
 def print_all_changes(changes):
