@@ -102,7 +102,7 @@ class Changes(object):
             proj.osf.add_container(asset['path'], kind='folder')
         else:
             proj.osf.add_file(asset)
-        logging.info("Added file to remote: {}".format(new_path))
+        logging.info("Added {} to remote: {}".format(asset['kind'], new_path))
         return 1
 
     def apply_add_index(self, proj, asset, new_path=None):

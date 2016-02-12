@@ -579,22 +579,28 @@ class OSFProject(Node):
             node = self
         else:
             if container_path not in self.containers:
+                logging.info("Needing new folder: {}".format(container_path))
                 container = self.add_container(container_path)
+                logging.info("Basing it in {}".format(container))
                 url_create = container['links']['new_folder']
             else:
                 container = self.containers[container_path]
-            url = "{}&name={}".format(url_create, name)
-            reply = self.session.put(url)
-            if reply.status_code != 200:
-                raise HTTPSError("URL:{}\nreply:{}".format(url,
-                                 json.dumps(reply.json(), indent=2)))
-            node = FileNode(self.session, reply.json()['data'])
+                logging.info("Using existing {}".format(container))
+
+        url = "{}&name={}".format(url_create, name)
+        reply = self.session.put(url)
+        if reply.status_code != 200:
+            raise HTTPSError("URL:{}\nreply:{}".format(url,
+                             json.dumps(reply.json(), indent=2)))
+        node = FileNode(self.session, reply.json()['data'])
         asset = {}
         asset['id'] = node.id
         asset['kind'] = node.kind
         asset['path'] = node.path
         asset['name'] = node.name
         asset['links'] = node.links
+        logging.info("created remote {} with path={}"
+                     .format(node.kind, node.path))
         self.containers[path] = asset
         return asset
 
@@ -605,6 +611,8 @@ class OSFProject(Node):
         container, name = os.path.split(asset['path'])
         folder_asset = self.add_container(container)
         url_upload = folder_asset['links']['upload']
+        logging.info("Uploading file {} to container:{}"
+                     .format(name, folder_asset))
         url = "{}?kind=file&name={}".format(url_upload, name)
         with open(asset['full_path'], 'rb') as f:
             reply = self.session.put(url, data=f)
