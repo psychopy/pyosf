@@ -512,6 +512,10 @@ class FileNode(Node):
             The root location to save the files in
 
         """
+        if self.kind != "file":
+            raise TypeError("pyosf: Attempted to download object of kind={!r}"
+                            "but download is only possible for files"
+                            .format(self.kind))
         URL = self.links['download']
         r = self.session.get(URL, stream=True)
         if r.status_code == 200:

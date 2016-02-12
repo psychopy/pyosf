@@ -82,6 +82,7 @@ class Changes(object):
                 return 1  # the folder may have been created implicitly already
             else:
                 os.makedirs(full_path)
+                return 1  # the folder may have been created implicitly already
 
         # this is a file
         container, filename = os.path.split(full_path)
@@ -323,6 +324,10 @@ def get_changes(local, remote, index):
     for path, local_asset in local_p.items():
         # code:01x we know these files aren't in index but are local
         if path in remote_p.keys():
+            if local_asset['kind'] == 'folder':  # if folder then leave both
+                continue
+            # TODO: do we need to handle the case that the user creates a
+            # folder in one place and file in another with same names?!
             remote_asset = remote_p[path]
             # code:011
             if remote_asset[SHA] == local_asset[SHA]:
