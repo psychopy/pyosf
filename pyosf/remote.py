@@ -589,7 +589,7 @@ class OSFProject(Node):
 
         url = "{}&name={}".format(url_create, name)
         reply = self.session.put(url)
-        if reply.status_code != 200:
+        if reply.status_code != 201:
             raise HTTPSError("URL:{}\nreply:{}".format(url,
                              json.dumps(reply.json(), indent=2)))
         node = FileNode(self.session, reply.json()['data'])

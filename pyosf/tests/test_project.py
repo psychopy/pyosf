@@ -18,11 +18,11 @@ tmp_folder = join(this_dir, "tmp")
 proj_file = join(this_dir, "tmp", "test.proj")
 proj_root = join(this_dir, "tmp", "files")
 
-#if os.path.isfile(proj_file):
-#    os.remove(proj_file)  # start with no project file (test creation)
+if os.path.isfile(proj_file):
+    os.remove(proj_file)  # start with no project file (test creation)
 
-#if os.path.isdir(proj_root):
-#    shutil.rmtree(proj_root)  # start with no project file (test creation)
+if os.path.isdir(proj_root):
+    shutil.rmtree(proj_root)  # start with no project file (test creation)
 
 
 def print_all_changes(changes):
@@ -68,7 +68,7 @@ def test_open_project():
     print(changes)  # prints a prettified table
     print_all_changes(changes)
 
-    #take a copy of the remote project files to revert to later
+    # take a copy of the remote project files to revert to later
     safe_copy = join(tmp_folder, "files_copy")
     if os.path.isdir(safe_copy):
         shutil.rmtree(safe_copy)
@@ -77,7 +77,8 @@ def test_open_project():
     # add a folder and some files locally
     orig = join(proj_root, 'visual')
     new = join(proj_root, 'visual2')
-    shutil.rmtree(new)
+    if os.path.isdir(new):
+        shutil.rmtree(new)
     shutil.copytree(orig, new)
     # sync with the new files to test upload and folder creation
     changes = proj.get_changes()
