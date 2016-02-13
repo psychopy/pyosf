@@ -77,6 +77,7 @@ def test_open_project():
     # add a folder and some files locally
     orig = join(proj_root, 'visual')
     new = join(proj_root, 'visual2')
+    shutil.rmtree(new)
     shutil.copytree(orig, new)
     # sync with the new files to test upload and folder creation
     changes = proj.get_changes()
