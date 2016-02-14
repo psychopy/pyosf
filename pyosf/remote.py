@@ -611,14 +611,18 @@ class OSFProject(Node):
         container, name = os.path.split(asset['path'])
         folder_asset = self.add_container(container)
         url_upload = folder_asset['links']['upload']
+        # prepare the file
+        if not url_upload.endswith("?kind=file"):
+            url_upload += "?kind=file"
+        url_upload = "{}&name={}".format(url_upload, name)
+        # do the upload
         logging.info("Uploading file {} to container:{}"
                      .format(name, folder_asset))
-        url = "{}?kind=file&name={}".format(url_upload, name)
         with open(asset['full_path'], 'rb') as f:
-            reply = self.session.put(url, data=f)
+            reply = self.session.put(url_upload, data=f)
         if reply.status_code not in [200, 201]:
             raise HTTPSError("URL:{}\nreply:{}"
-                             .format(url, json.dumps(reply.json(), indent=2)))
+                             .format(url_upload, json.dumps(reply.json(), indent=2)))
         node = FileNode(self.session, reply.json()['data'])
         if asset[constants.SHA] != \
                 node.json['attributes']['extra']['hashes'][constants.SHA]:
