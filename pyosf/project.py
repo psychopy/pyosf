@@ -157,5 +157,5 @@ class Project(object):
         """
         osf_index = self.osf.create_index()
         local_index = self.local.create_index()
-        changes = sync.get_changes(local_index, osf_index, self.index)
+        changes = sync.Changes(local_index, osf_index, self.index)
         return changes
