@@ -16,6 +16,7 @@ try:
     from psychopy import logging
 except ImportError:
     import logging
+from .tools import dict_from_list
 
 """
 Resolutions table
@@ -34,15 +35,6 @@ search for e.g. code:010 to find the relevant python resolution
 |     0 |     0 |      1 | create on local                           |
 +-------+-------+--------+-------------------------------------------+
 """
-
-
-def dict_from_list(in_list, key):
-    """From a list of dicts creates a dict of dicts using a given key name
-    """
-    d = {}
-    for entry in in_list:
-        d[entry[key]] = entry
-    return d
 
 
 class Changes(object):
@@ -200,8 +192,11 @@ class Changes(object):
     def analyze(self):
         """Take a list of files
         """
-        local, remote, index = self.local_index, self.remote_index, self.last_index
-        # copies of the three asset lists. Safe to alter these only at top level
+        local = self.local_index
+        remote = self.remote_index
+        index = self.last_index
+        # copies of the three asset lists.
+        # Safe to alter these only at top level
         local_p = dict_from_list(local, 'path')
         remote_p = dict_from_list(remote, 'path')
         index_p = dict_from_list(index, 'path')
@@ -216,7 +211,7 @@ class Changes(object):
                 remote_asset = remote_p[path]
 
                 if asset['kind'] == 'folder':
-                    pass  # for folders we need to check contents not folder itself
+                    pass  # for folders check /contents/ not folder itself
 
                 elif asset[SHA] == remote_asset[SHA] and \
                         asset[SHA] == local_asset[SHA]:
@@ -244,7 +239,7 @@ class Changes(object):
                 elif asset[SHA] != remote_p[path][SHA]:
                     # changed remotely only
                     # TODO: we know the files differ and we presume the remote
-                    # is the newer one, but should we be checking the dat_modified?
+                    # is the newer one. Could check the dat_modified?
                     # But if they differed wouldn't that mean a clock err?
                     self.update_local['path'] = remote_asset
                     self.update_index['path'] = remote_asset
@@ -252,7 +247,7 @@ class Changes(object):
                 elif asset[SHA] != local_p[path][SHA]:
                     # changed locally only
                     # TODO: we know the files differ and we presume the local
-                    # is the newer one, but should we be checking the dat_modified?
+                    # is the newer one. Could check the dat_modified?
                     # But if they differed wouldn't that mean a clock err?
                     # fetch the links from the remote so we can do an update op
                     local_asset['links'] = remote_p[path]['links']
@@ -313,14 +308,14 @@ class Changes(object):
         for path, local_asset in local_p.items():
             # code:01x we know these files aren't in index but are local
             if path in remote_p.keys():
-                if local_asset['kind'] == 'folder':  # if folder then leave both
+                if local_asset['kind'] == 'folder':  # if folder then leave
                     continue
                 # TODO: do we need to handle the case that the user creates a
                 # folder in one place and file in another with same names?!
                 remote_asset = remote_p[path]
                 # code:011
                 if remote_asset[SHA] == local_asset[SHA]:
-                    # both copies match but not in index (user manually uplaoded?)
+                    # both copies match but not in index (user uplaoded?)
                     self.add_index[path] = local_asset
                 del remote_p[path]
             else:

@@ -19,7 +19,8 @@ try:
 except ImportError:
     import logging
     console = logging.getLogger()
-from pyosf import constants
+from . import constants
+from .tools import dict_from_list, find_by_key
 
 PY3 = sys.version_info > (3,)
 
@@ -549,11 +550,21 @@ class OSFProject(Node):
         self.containers = {}  # a dict of Nodes and folders to contain files
         self.path = ""  # provided for consistency with FileNode
         self.name = ""  # provided for consistency with FileNode
+        self._index = []
 
     def __repr__(self):
         return "OSF_Project(%r)" % (self.id)
 
-    def create_index(self):
+    @property
+    def index(self):
+        if not self._index:
+            self.rebuild_index()
+        return self._index
+
+    def index_dict(self):
+        return dict_from_list(self.index)
+
+    def rebuild_index(self):
         """Returns a flat list of all files from this node down
         """
         file_list = Node.create_index(self)  # Node does the main leg work
@@ -571,7 +582,7 @@ class OSFProject(Node):
                             asset['date_modified'] > modified:
                         modified = asset['date_modified']
             entry['date_modified'] = modified
-        return file_list
+        self._index = file_list
 
     def add_container(self, path, kind='folder'):
         """Adds a container (currently only a folder) recursively.
@@ -604,7 +615,7 @@ class OSFProject(Node):
         if reply.status_code == 409:
             # conflict code indicating the folder does exist
             print("err 409:", path, self.containers)
-            print( self.links )
+            print(self.links)
         elif reply.status_code not in [200, 201]:  # some other problem
             raise HTTPSError("URL:{}\nreply:{}".format(url,
                              json.dumps(reply.json(), indent=2)))
@@ -616,6 +627,10 @@ class OSFProject(Node):
         self.containers[path] = asset
         return asset
 
+    def find_asset(self, path):
+        """Finds an asset (including id and links) by its path
+        """
+        return find_by_key(self.index, 'path', path)
 
     def add_file(self, asset, update=False):
         """Adds the file to the OSF project.

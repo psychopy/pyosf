@@ -13,6 +13,7 @@ from os.path import join
 import gc
 import shutil
 import hashlib
+import copy
 
 
 def do_sync(proj):
@@ -122,28 +123,58 @@ class TestProjectChanges():
         proj.save()
 
     def test_conflict(self):
-        # create a conflict by changing a file in both locations
         proj = project.Project(project_file=self.proj_file)
+        fname = 'text_in_visual.txt'
+        # make changes to both and test sync
+        self._make_changes(proj, fname,
+                           local_change=True, remote_change=True)
+        print("Doing conflicted sync")
+        do_sync(proj)
+
+    def test_local_updated(self):
+        proj = project.Project(project_file=self.proj_file)
+        fname = 'lower_level.txt'
+        # make changes to both and test sync
+        self._make_changes(proj, fname,
+                           local_change=True, remote_change=False)
+        print("Sync with a local update")
+        do_sync(proj)
+
+    def test_remote_updated(self):
+        proj = project.Project(project_file=self.proj_file)
+        fname = 'README.txt'
+        # make changes to both and test sync
+        self._make_changes(proj, fname,
+                           local_change=False, remote_change=True)
+        print("Sync with a local update")
+        do_sync(proj)
+
+    def _make_changes(self, proj, filename,
+                      local_change=True, remote_change=True):
+        """Function to apply changes to local file, remote or both
+        """
+        # create a conflict by changing a file in both locations
         last_index = proj.index
         # find a text file
         for asset in last_index:
-            if asset['path'].endswith('text_in_visual.txt'):
+            if asset['path'].endswith(filename):
                 break
         path = asset['full_path']
-        # modify it
-        with open(path, 'ab') as f:
-            f.write("A bit of added text. ")
-        # get the new SHA (needed to verify successful upload)
-        with open(path, "rb") as f:
-            hash_func = getattr(hashlib, constants.SHA.lower())
-            asset[constants.SHA] = hash_func(f.read()).hexdigest()
-        proj.osf.add_file(asset)
-        # change again locally
-        with open(path, 'ab') as f:
-            f.write("And some more added text. ")
-        # sync with the new files to test conflict resolution
-        do_sync(proj)
-
+        if remote_change:
+            # modify it
+            with open(path, 'ab') as f:
+                f.write("A bit of text added remotely. ")
+            # get the new SHA (needed to verify successful upload)
+            new_asset = copy.copy(proj.osf.find_asset(asset['path']))
+            new_asset['full_path'] = asset['full_path']
+            with open(path, "rb") as f:
+                hash_func = getattr(hashlib, constants.SHA.lower())
+                new_asset[constants.SHA] = hash_func(f.read()).hexdigest()
+            proj.osf.add_file(new_asset, update=True)
+        if local_change:
+            # change again locally
+            with open(path, 'ab') as f:
+                f.write("A bit of text added locally. ")
 
 if __name__ == "__main__":
     try:
@@ -154,4 +185,5 @@ if __name__ == "__main__":
         console = logging.getLogger()
     console.setLevel(logging.INFO)
     import pytest
-    pytest.main(args=[__file__, '-s'])
+    pytest.main(args=[__file__+"::TestProjectChanges::test_conflict", '-s'])
+#    pytest.main(args=[__file__, '-s'])
