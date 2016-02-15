@@ -9,6 +9,7 @@
 from __future__ import absolute_import, print_function
 import os
 import sys
+import time
 import requests
 import json
 import datetime
@@ -589,9 +590,19 @@ class OSFProject(Node):
 
         url = "{}&name={}".format(url_create, name)
         reply = self.session.put(url)
-        if reply.status_code != 201:
-            raise HTTPSError("URL:{}\nreply:{}".format(url,
-                             json.dumps(reply.json(), indent=2)))
+        if reply.status_code == 201:
+            pass  # success
+        elif reply.status_code == 404:
+            # page not found. Take a pause and try again
+            for attempt_n in range(3):
+                time.sleep(0.5)
+                url = "{}&name={}".format(url_create, name)
+                reply = self.session.put(url)
+                if reply.status_code == 201:
+                    break  # success
+            if reply.status_code == 404:  # still no success
+                    raise HTTPSError("URL:{}\nreply:{}".format(url,
+                                     json.dumps(reply.json(), indent=2)))
         node = FileNode(self.session, reply.json()['data'])
         asset = {}
         asset['id'] = node.id
@@ -602,7 +613,6 @@ class OSFProject(Node):
         logging.info("created remote {} with path={}"
                      .format(node.kind, node.path))
         self.containers[path] = asset
-        time.sleep(0.2)  # in case the container links get used before ready?
         return asset
 
     def add_file(self, asset):
@@ -623,7 +633,8 @@ class OSFProject(Node):
             reply = self.session.put(url_upload, data=f)
         if reply.status_code not in [200, 201]:
             raise HTTPSError("URL:{}\nreply:{}"
-                             .format(url_upload, json.dumps(reply.json(), indent=2)))
+                             .format(url_upload,
+                                     json.dumps(reply.json(), indent=2)))
         node = FileNode(self.session, reply.json()['data'])
         if asset[constants.SHA] != \
                 node.json['attributes']['extra']['hashes'][constants.SHA]:
