@@ -602,6 +602,7 @@ class OSFProject(Node):
         logging.info("created remote {} with path={}"
                      .format(node.kind, node.path))
         self.containers[path] = asset
+        time.sleep(0.2)  # in case the container links get used before ready?
         return asset
 
     def add_file(self, asset):
