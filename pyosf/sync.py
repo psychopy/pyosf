@@ -48,7 +48,7 @@ def dict_from_list(in_list, key):
 class Changes(object):
     """This is essentially a dictionary of lists
     """
-    def __init__(self):
+    def __init__(self, local_index, remote_index, last_index):
         # create the names of the self attributes
         # the actual attributes will be created during _set_empty
         self._change_types = []
@@ -56,6 +56,11 @@ class Changes(object):
             for target in ['local', 'remote', 'index']:
                 self._change_types.append("{}_{}".format(action, target))
         self._set_empty()
+        self.local_index = local_index
+        self.remote_index = remote_index
+        self.last_index = last_index
+        self.analyze()
+
 
     def __str__(self):
         s = "\t Add\t Del\t Mv\t Update\n"
@@ -192,6 +197,141 @@ class Changes(object):
         proj.index = proj.local.create_index()
         self._set_empty()
 
+    def analyze(self):
+        """Take a list of files
+        """
+        local, remote, index = self.local_index, self.remote_index, self.last_index
+        # copies of the three asset lists. Safe to alter these only at top level
+        local_p = dict_from_list(local, 'path')
+        remote_p = dict_from_list(remote, 'path')
+        index_p = dict_from_list(index, 'path')
+
+        # go through the files in the database
+        for path, asset in index_p.items():
+            # code:1xx all these files existed at last sync
+            if path in remote_p.keys() and path in local_p.keys():
+                # code:111
+                # Still exists in all. Check for local/remote modifications
+                local_asset = local_p[path]
+                remote_asset = remote_p[path]
+
+                if asset['kind'] == 'folder':
+                    pass  # for folders we need to check contents not folder itself
+
+                elif asset[SHA] == remote_asset[SHA] and \
+                        asset[SHA] == local_asset[SHA]:
+                    # all copies match. Go and have a cup of tea.
+                    pass
+
+                elif asset[SHA] != remote_p[path][SHA] and \
+                        asset[SHA] != local_p[path][SHA]:
+                    # both changed. Conflict!
+                    local_time = local_asset['time_modified']
+                    remote_time = remote_asset['time_modified']
+                    local_path, remote_path = conflict_paths(path, local_time,
+                                                             remote_time)
+                    # rename the remote and local files with CONFLICT tag
+                    self.mv_local[local_path] = local_asset
+                    self.mv_remote[remote_path] = remote_asset
+                    # and swap the version from the other side
+                    self.add_local[remote_path] = remote_asset
+                    self.add_remote[local_path] = local_asset
+                    # and update index
+                    self.del_index[asset['path']] = asset
+                    self.add_index[remote_path] = remote_asset
+                    self.add_index[local_path] = local_asset
+
+                elif asset[SHA] != remote_p[path][SHA]:
+                    # changed remotely only
+                    # TODO: we know the files differ and we presume the remote
+                    # is the newer one, but should we be checking the dat_modified?
+                    # But if they differed wouldn't that mean a clock err?
+                    self.update_local['path'] = remote_asset
+                    self.update_index['path'] = remote_asset
+
+                elif asset[SHA] != local_p[path][SHA]:
+                    # changed locally only
+                    # TODO: we know the files differ and we presume the local
+                    # is the newer one, but should we be checking the dat_modified?
+                    # But if they differed wouldn't that mean a clock err?
+                    self.update_remote['path'] = local_asset
+                    self.update_index['path'] = local_asset
+
+                # don't re-analyze
+                del local_p[path]
+                del remote_p[path]
+
+            elif path not in remote_p.keys() and path not in local_p.keys():
+                # code:100
+                # Was deleted in both. Safe to remove from index
+                self.del_index[path] = asset
+
+            elif path not in local_p.keys():
+                remote_asset = remote_p[path]
+                # code:101 has been deleted locally but exists remotely
+                if asset['date_modified'] < remote_p[path]['date_modified']:
+                    # deleted locally but changed on remote. Recreate
+                    # make new path and get the newer asset info
+                    new_path = recreated_path(path)
+                    # remote: rename (move) to include "_DELETED"
+                    self.mv_remote[new_path] = remote_asset
+                    # index: remove old asset and add new one
+                    self.del_index[asset['path']] = asset
+                    self.add_index[new_path] = remote_asset
+                    # local: just add the new asset with new path
+                    self.add_local[new_path] = remote_asset
+                else:
+                    # deleted locally unchanged remotely. Delete in both
+                    self.del_index[asset['path']] = asset
+                    self.del_remote[asset['path']] = remote_asset
+                del remote_p[path]  # remove so we don't re-analyze
+
+            elif path not in remote_p.keys():
+                # has been deleted remotely but exists locally
+                # code:110
+                if asset['date_modified'] < local_p[path]['date_modified']:
+                    # deleted remotely but changed on local. Recreate
+                    # make new path and get the newer asset info
+                    new_path = recreated_path(path)
+                    new_asset = local_p[path]
+                    # remote: rename (move) to include "_DELETED"
+                    self.mv_local[new_path] = new_asset
+                    # index: remove old asset and add new one
+                    self.del_index[asset['path']] = asset
+                    self.add_index[new_path] = new_asset
+                    # local: just add the new asset with new path
+                    self.add_remote[new_path] = new_asset
+                else:
+                    # deleted remotely unchanged locally. Delete in both
+                    self.del_index[asset['path']] = asset
+                    self.del_local[asset['path']] = asset
+                del local_p[path]  # remove so we don't re-analyse
+
+        # go through the files in the local
+        for path, local_asset in local_p.items():
+            # code:01x we know these files aren't in index but are local
+            if path in remote_p.keys():
+                if local_asset['kind'] == 'folder':  # if folder then leave both
+                    continue
+                # TODO: do we need to handle the case that the user creates a
+                # folder in one place and file in another with same names?!
+                remote_asset = remote_p[path]
+                # code:011
+                if remote_asset[SHA] == local_asset[SHA]:
+                    # both copies match but not in index (user manually uplaoded?)
+                    self.add_index[path] = local_asset
+                del remote_p[path]
+            else:
+                # code:010
+                self.add_index[path] = local_asset
+                self.add_remote[path] = local_asset
+
+        # go through the files in the remote
+        for path, remote_asset in remote_p.items():
+            # code:001 has been created remotely
+            self.add_index[path] = remote_asset
+            self.add_local[path] = remote_asset
+
 
 def recreated_path(path):
     """If we have to add a file back (that was deleted) then add RECREATED to
@@ -208,144 +348,6 @@ def conflict_paths(path, local_time, server_time):
     local = "{}_CONFLICT{}.{}".format(root, local_time, ext)
     server = "{}_CONFLICT{}.{}".format(root, server_time, ext)
     return local, server
-
-
-def get_changes(local, remote, index):
-    """Take a list of files
-    """
-    # copies of the three asset lists. Safe to alter these only at top level
-    local_p = dict_from_list(local, 'path')
-    remote_p = dict_from_list(remote, 'path')
-    index_p = dict_from_list(index, 'path')
-    changes = Changes()
-
-    # go through the files in the database
-    for path, asset in index_p.items():
-        # code:1xx all these files existed at last sync
-        if path in remote_p.keys() and path in local_p.keys():
-            # code:111
-            # Still exists in all. Check for local/remote modifications
-            local_asset = local_p[path]
-            remote_asset = remote_p[path]
-
-            if asset['kind'] == 'folder':
-                pass  # for folders we need to check contents not folder itself
-
-            elif asset[SHA] == remote_asset[SHA] and \
-                    asset[SHA] == local_asset[SHA]:
-                # all copies match. Go and have a cup of tea.
-                pass
-
-            elif asset[SHA] != remote_p[path][SHA] and \
-                    asset[SHA] != local_p[path][SHA]:
-                # both changed. Conflict!
-                local_time = local_asset['time_modified']
-                remote_time = remote_asset['time_modified']
-                local_path, remote_path = conflict_paths(path, local_time,
-                                                         remote_time)
-                # rename the remote and local files with CONFLICT tag
-                changes.mv_local[local_path] = local_asset
-                changes.mv_remote[remote_path] = remote_asset
-                # and swap the version from the other side
-                changes.add_local[remote_path] = remote_asset
-                changes.add_remote[local_path] = local_asset
-                # and update index
-                changes.del_index[asset['path']] = asset
-                changes.add_index[remote_path] = remote_asset
-                changes.add_index[local_path] = local_asset
-
-            elif asset[SHA] != remote_p[path][SHA]:
-                # changed remotely only
-                # TODO: we know the files differ and we presume the remote
-                # is the newer one, but should we be checking the dat_modified?
-                # But if they differed wouldn't that mean a clock err?
-                changes.update_local['path'] = remote_asset
-                changes.update_index['path'] = remote_asset
-
-            elif asset[SHA] != local_p[path][SHA]:
-                # changed locally only
-                # TODO: we know the files differ and we presume the local
-                # is the newer one, but should we be checking the dat_modified?
-                # But if they differed wouldn't that mean a clock err?
-                changes.update_remote['path'] = local_asset
-                changes.update_index['path'] = local_asset
-
-            # don't re-analyze
-            del local_p[path]
-            del remote_p[path]
-
-        elif path not in remote_p.keys() and path not in local_p.keys():
-            # code:100
-            # Was deleted in both. Safe to remove from index
-            changes.del_index[path] = asset
-
-        elif path not in local_p.keys():
-            remote_asset = remote_p[path]
-            # code:101 has been deleted locally but exists remotely
-            if asset['date_modified'] < remote_p[path]['date_modified']:
-                # deleted locally but changed on remote. Recreate
-                # make new path and get the newer asset info
-                new_path = recreated_path(path)
-                # remote: rename (move) to include "_DELETED"
-                changes.mv_remote[new_path] = remote_asset
-                # index: remove old asset and add new one
-                changes.del_index[asset['path']] = asset
-                changes.add_index[new_path] = remote_asset
-                # local: just add the new asset with new path
-                changes.add_local[new_path] = remote_asset
-            else:
-                # deleted locally unchanged remotely. Delete in both
-                changes.del_index[asset['path']] = asset
-                changes.del_remote[asset['path']] = remote_asset
-            del remote_p[path]  # remove so we don't re-analyze
-
-        elif path not in remote_p.keys():
-            # has been deleted remotely but exists locally
-            # code:110
-            if asset['date_modified'] < local_p[path]['date_modified']:
-                # deleted remotely but changed on local. Recreate
-                # make new path and get the newer asset info
-                new_path = recreated_path(path)
-                new_asset = local_p[path]
-                # remote: rename (move) to include "_DELETED"
-                changes.mv_local[new_path] = new_asset
-                # index: remove old asset and add new one
-                changes.del_index[asset['path']] = asset
-                changes.add_index[new_path] = new_asset
-                # local: just add the new asset with new path
-                changes.add_remote[new_path] = new_asset
-            else:
-                # deleted remotely unchanged locally. Delete in both
-                changes.del_index[asset['path']] = asset
-                changes.del_local[asset['path']] = asset
-            del local_p[path]  # remove so we don't re-analyse
-
-    # go through the files in the local
-    for path, local_asset in local_p.items():
-        # code:01x we know these files aren't in index but are local
-        if path in remote_p.keys():
-            if local_asset['kind'] == 'folder':  # if folder then leave both
-                continue
-            # TODO: do we need to handle the case that the user creates a
-            # folder in one place and file in another with same names?!
-            remote_asset = remote_p[path]
-            # code:011
-            if remote_asset[SHA] == local_asset[SHA]:
-                # both copies match but not in index (user manually uplaoded?)
-                changes.add_index[path] = local_asset
-            del remote_p[path]
-        else:
-            # code:010
-            changes.add_index[path] = local_asset
-            changes.add_remote[path] = local_asset
-
-    # go through the files in the remote
-    for path, remote_asset in remote_p.items():
-        # code:001 has been created remotely
-        changes.add_index[path] = remote_asset
-        changes.add_local[path] = remote_asset
-
-    return changes
 
 
 def _update_path(asset, new_path=None):
