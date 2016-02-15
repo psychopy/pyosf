@@ -33,16 +33,16 @@ def print_all_changes(changes):
 
 class TestProjectChanges():
 
-    def teardown(self):
-        return
+    def teardown_class(self):
         # take a copy of the remote project files to revert to later
+        shutil.copytree(self.proj_root, 'safeplace')
         shutil.rmtree(self.proj_root)
         shutil.copytree(self.safe_copy, self.proj_root)
         # perform a sync with remote to reset all the files there
         proj = project.Project(project_file=self.proj_file)
         do_sync(proj)
 
-    def setup(self):
+    def setup_class(self):
         self.proj_id = 'qgt58'
         self.this_dir, filename = os.path.split(__file__)
         self.tmp_folder = join(self.this_dir, "tmp")
@@ -124,26 +124,25 @@ class TestProjectChanges():
     def test_conflict(self):
         # create a conflict by changing a file in both locations
         proj = project.Project(project_file=self.proj_file)
-        pass  # TODO: fix to use update code (rather than upload)
-#        last_index = proj.index
-#        # find a text file
-#        for asset in last_index:
-#            if asset['path'].endswith('text_in_visual.txt'):
-#                break
-#        path = asset['full_path']
-#        # modify it
-#        with open(path, 'ab') as f:
-#            f.write("A bit of added text. ")
-#        # get the new SHA (needed to verify successful upload)
-#        with open(path, "rb") as f:
-#            hash_func = getattr(hashlib, constants.SHA.lower())
-#            asset[constants.SHA] = hash_func(f.read()).hexdigest()
-#        proj.osf.add_file(asset)
-#        # change again locally
-#        with open(path, 'ab') as f:
-#            f.write("And some more added text. ")
-#        # sync with the new files to test conflict resolution
-#        do_sync(proj)
+        last_index = proj.index
+        # find a text file
+        for asset in last_index:
+            if asset['path'].endswith('text_in_visual.txt'):
+                break
+        path = asset['full_path']
+        # modify it
+        with open(path, 'ab') as f:
+            f.write("A bit of added text. ")
+        # get the new SHA (needed to verify successful upload)
+        with open(path, "rb") as f:
+            hash_func = getattr(hashlib, constants.SHA.lower())
+            asset[constants.SHA] = hash_func(f.read()).hexdigest()
+        proj.osf.add_file(asset)
+        # change again locally
+        with open(path, 'ab') as f:
+            f.write("And some more added text. ")
+        # sync with the new files to test conflict resolution
+        do_sync(proj)
 
 
 if __name__ == "__main__":

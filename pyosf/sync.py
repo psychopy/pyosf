@@ -52,7 +52,8 @@ class Changes(object):
         # create the names of the self attributes
         # the actual attributes will be created during _set_empty
         self._change_types = []
-        for action in ['del', 'mv', 'add', 'update']:
+        # order is determined by the conflict cases (requires most change)
+        for action in ['add', 'mv', 'update', 'del']:
             for target in ['local', 'remote', 'index']:
                 self._change_types.append("{}_{}".format(action, target))
         self._set_empty()
@@ -60,7 +61,6 @@ class Changes(object):
         self.remote_index = remote_index
         self.last_index = last_index
         self.analyze()
-
 
     def __str__(self):
         s = "\t Add\t Del\t Mv\t Update\n"
@@ -111,8 +111,8 @@ class Changes(object):
         return 1
 
     def apply_add_index(self, proj, asset, new_path=None):
-#         proj.index.append(asset)
-#         logging.info("Added file to index: {}".format(asset['path']))
+        # proj.index.append(asset)
+        # logging.info("Added file to index: {}".format(asset['path']))
         return 1
 
     def apply_mv_local(self, proj, asset, new_path):
@@ -131,7 +131,7 @@ class Changes(object):
 
     def apply_mv_index(self, proj, asset, new_path):
         # for the index replacing with the new asset is the same as moving
-#        self.apply_update_index(proj, asset, new_path)
+        # self.apply_update_index(proj, asset, new_path)
         return 1
 
     def apply_del_local(self, proj, asset, new_path=None):
@@ -148,11 +148,11 @@ class Changes(object):
         return 1
 
     def apply_del_index(self, proj, asset, new_path=None):
-#        proj.index.remove(asset)
-#        logging.info("Removed file from index: {}".format(asset['path']))
+        # proj.index.remove(asset)
+        # logging.info("Removed file from index: {}".format(asset['path']))
         return 1
 
-    def apply_update_local(self, proj, asset):
+    def apply_update_local(self, proj, asset, new_path=None):
         full_path = os.path.join(proj.local.root_path, asset['path'])
         # remove previous copy of file
         if os.path.isfile(full_path):  # might have been removed already?
@@ -161,18 +161,18 @@ class Changes(object):
         proj.osf.session.download_file(asset['id'], full_path)
         return 1
 
-    def apply_update_remote(self, proj, asset):
-        pass  # TODO:
+    def apply_update_remote(self, proj, asset, new_path=None):
+        proj.osf.add_file(asset, update=True)
         return 1
 
-    def apply_update_index(self, proj, asset):
+    def apply_update_index(self, proj, asset, new_path=None):
         # remove the asset with that path and add new asset to proj.index
-#        path = asset['path']
-#        index = proj.index
-#        # use a python "generator expression" to find old asset
-#        old_asset = (item for item in index if item["path"] == path).next()
-#        proj.index.remove(old_asset)
-#        proj.index.append(asset)
+        #   path = asset['path']
+        #   index = proj.index
+        #   # use a python "generator expression" to find old asset
+        #   old_asset = (item for item in index if item["path"] == path).next()
+        #   proj.index.remove(old_asset)
+        #   proj.index.append(asset)
         return 1
 
     def apply(self, proj):
@@ -254,6 +254,8 @@ class Changes(object):
                     # TODO: we know the files differ and we presume the local
                     # is the newer one, but should we be checking the dat_modified?
                     # But if they differed wouldn't that mean a clock err?
+                    # fetch the links from the remote so we can do an update op
+                    local_asset['links'] = remote_p[path]['links']
                     self.update_remote['path'] = local_asset
                     self.update_index['path'] = local_asset
 
@@ -274,12 +276,12 @@ class Changes(object):
                     # make new path and get the newer asset info
                     new_path = recreated_path(path)
                     # remote: rename (move) to include "_DELETED"
+                    # local: just add the new asset with new path
+                    self.add_local[new_path] = remote_asset
                     self.mv_remote[new_path] = remote_asset
                     # index: remove old asset and add new one
                     self.del_index[asset['path']] = asset
                     self.add_index[new_path] = remote_asset
-                    # local: just add the new asset with new path
-                    self.add_local[new_path] = remote_asset
                 else:
                     # deleted locally unchanged remotely. Delete in both
                     self.del_index[asset['path']] = asset

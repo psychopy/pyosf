@@ -382,21 +382,12 @@ class Node(object):
         file_list = []
         for entry in reply:
             f = FileNode(self.session, entry)
-            d = {}
-            d['id'] = f.id
-            d['kind'] = f.kind
-            d['path'] = f.path
-            d['name'] = f.name
-            d['links'] = f.links
-            if f.kind == 'file':  # not folder
-                d['url'] = f.links['download']
-                d['md5'] = f.md5
-                d['sha256'] = f.sha256
-                d['size'] = f.size
-                d['date_modified'] = f.modified
-            elif f.kind == 'folder':
+            d = f.as_asset()
+            # if folder then get the assets below as well
+            if f.kind == 'folder':
                 folder_url = f.links['move']
                 file_list.extend(self._node_file_list(folder_url))
+            # for folder of files store this asset
             if f.path not in ['', '/']:
                 file_list.append(d)
         return file_list
@@ -412,6 +403,24 @@ class Node(object):
         file_list.extend(self._node_file_list("{}/nodes/{}/files/osfstorage"
                          .format(constants.API_BASE, self.id)))
         return file_list
+
+    def as_asset(self):
+        """Returns a dict containing a subset of the fields that we use to
+        store asset info in our indices
+        """
+        d = {}
+        d['id'] = self.id
+        d['kind'] = self.kind
+        d['path'] = self.path
+        d['name'] = self.name
+        d['links'] = self.links
+        if self.kind == 'file':  # not folder
+            d['url'] = self.links['download']
+            d['md5'] = self.md5
+            d['sha256'] = self.sha256
+            d['size'] = self.size
+            d['date_modified'] = self.modified
+        return d
 
 
 class FileNode(Node):
@@ -570,6 +579,8 @@ class OSFProject(Node):
         If the previous container was a folder or node it doesn't matter; they
         are treated equivalently here.
         """
+        if len(self.containers) == 0:
+            self.create_index()
         # TODO: what if a node and a folder have the same name?
         if path in self.containers:
             return self.containers[path]  # nothing to do, return the container
@@ -590,45 +601,42 @@ class OSFProject(Node):
 
         url = "{}&name={}".format(url_create, name)
         reply = self.session.put(url)
-        if reply.status_code == 201:
-            pass  # success
-        elif reply.status_code == 404:
-            # page not found. Take a pause and try again
-            for attempt_n in range(3):
-                time.sleep(0.5)
-                url = "{}&name={}".format(url_create, name)
-                reply = self.session.put(url)
-                if reply.status_code == 201:
-                    break  # success
-            if reply.status_code == 404:  # still no success
-                    raise HTTPSError("URL:{}\nreply:{}".format(url,
-                                     json.dumps(reply.json(), indent=2)))
-        node = FileNode(self.session, reply.json()['data'])
-        asset = {}
-        asset['id'] = node.id
-        asset['kind'] = node.kind
-        asset['path'] = node.path
-        asset['name'] = node.name
-        asset['links'] = node.links
+        if reply.status_code == 409:
+            # conflict code indicating the folder does exist
+            print("err 409:", path, self.containers)
+            print( self.links )
+        elif reply.status_code not in [200, 201]:  # some other problem
+            raise HTTPSError("URL:{}\nreply:{}".format(url,
+                             json.dumps(reply.json(), indent=2)))
+        else:
+            reply_json = reply.json()['data']
+        asset = FileNode(self.session, reply_json).as_asset()
         logging.info("created remote {} with path={}"
                      .format(node.kind, node.path))
         self.containers[path] = asset
         return asset
 
-    def add_file(self, asset):
+
+    def add_file(self, asset, update=False):
         """Adds the file to the OSF project.
         If containing folder doesn't exist then it will be created recursively
+
+        update is used if the file already exists but needs updating (version
+        will be incremented).
         """
-        container, name = os.path.split(asset['path'])
-        folder_asset = self.add_container(container)
-        url_upload = folder_asset['links']['upload']
-        # prepare the file
-        if not url_upload.endswith("?kind=file"):
-            url_upload += "?kind=file"
-        url_upload = "{}&name={}".format(url_upload, name)
-        # do the upload
-        logging.info("Uploading file {} to container:{}"
-                     .format(name, folder_asset))
+        if update:
+            url_upload = asset['links']['upload']
+            logging.info("Updating file : {}".format(asset['path']))
+        else:
+            container, name = os.path.split(asset['path'])
+            folder_asset = self.add_container(container)
+            url_upload = folder_asset['links']['upload']
+            if not url_upload.endswith("?kind=file"):
+                url_upload += "?kind=file"
+            url_upload += "&name={}".format(name)
+            # do the upload
+            logging.info("Uploading file {} to container:{}"
+                         .format(name, folder_asset))
         with open(asset['full_path'], 'rb') as f:
             reply = self.session.put(url_upload, data=f)
         if reply.status_code not in [200, 201]:
@@ -666,13 +674,15 @@ class OSFProject(Node):
         # TODO:  # check if move worked
 
     def del_file(self, asset):
+
         url_del = asset['links']['delete']
         reply = self.session.delete(url_del)
         if reply.status_code != 204:
             raise HTTPSError("Failed remote file delete URL:{}\nreply:{}"
                              .format(url_del,
                                      json.dumps(reply.json(), indent=2)))
-
+        if asset['path'] in self.containers:
+            del self.containers[asset['path']]
 
 if __name__ == "__main__":
     import pytest

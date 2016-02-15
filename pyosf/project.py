@@ -110,7 +110,6 @@ class Project(object):
         d['project_id'] = self.osf.id
         d['index'] = self.index
         # do the actual file save
-        print("saving to: {}".format(proj_path))
         with open(proj_path, 'wb') as f:
             json_str = json.dumps(d, indent=2)
             if PY3:
