@@ -301,12 +301,20 @@ class Node(object):
         elif id.startswith('http'):
             # treat as URL. Extract the id from the request data
             reply = self.session.get(id)
-            self.json = reply.json()['data']
+            if reply.status_code == 200:
+                self.json = reply.json()['data']
+            else:
+                raise HTTPSError("Failed to create session from OSF_id:" +
+                                 reply)
         else:
             # treat as OSF id and fetch the URL
             reply = self.session.get("{}/nodes/{}/"
                                      .format(constants.API_BASE, id))
-            self.json = reply.json()['data']
+            if reply.status_code == 200:
+                self.json = reply.json()['data']
+            else:
+                raise HTTPSError("Failed to create session from OSF_id:" +
+                                 reply)
         # also get info about files if possible
         files_reply = self.session.get("{}/nodes/{}/files"
                                        .format(constants.API_BASE, id))
@@ -549,14 +557,14 @@ class OSFProject(Node):
         self.containers = {}  # a dict of Nodes and folders to contain files
         self.path = ""  # provided for consistency with FileNode
         self.name = ""  # provided for consistency with FileNode
-        self._index = []
+        self._index = None
 
     def __repr__(self):
         return "OSF_Project(%r)" % (self.id)
 
     @property
     def index(self):
-        if not self._index:
+        if self._index is None:
             self.rebuild_index()
         return self._index
 
@@ -666,20 +674,22 @@ class OSFProject(Node):
 
     def move_file(self, asset, new_path):
         # ensure the target location exists
-        new_folder, new_name = os.path.split(asset['path'])
+        new_folder, new_name = os.path.split(new_path)
         if new_folder not in self.containers:
             folder_asset = self.add_container(new_folder)
+        else:
+            folder_asset = self.containers[new_folder]
+
         # get the url and perform the move
         url_move = asset['links']['move']
         # TODO: for file to move to different node (rather than a folder within
         # a node) we need to find the node id for that container (use links?)
         body = """{"action":   "move",
-                "path":     {},
-                // optional
-                "rename":   {},
-                "conflict": "replace", // 'replace' or 'keep'
-                "resource": {}, // deflts to current {node_id}
-               }""".format(new_folder, new_name, folder_asset['id'])
+                "path":     "/%s",
+                "rename":   "%s",
+                "conflict": "replace",
+                "resource": "%s"}
+               """ % (new_folder, new_name, folder_asset['id'])
         reply = self.session.post(url_move, data=body)
         if reply.status_code not in [200, 201]:
             raise HTTPSError("Failed remote file move URL:{}\nreply:{}"

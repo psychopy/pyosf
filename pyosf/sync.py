@@ -186,7 +186,8 @@ class Changes(object):
                 asset = action_dict[new_path]
                 func_apply(proj, asset, new_path)
         # when local/remote updates are complete refresh index based on local
-        proj.index = proj.local.create_index()
+        proj.local.rebuild_index()
+        proj.index = proj.local.index
         self._set_empty()
 
     def analyze(self):
@@ -218,11 +219,11 @@ class Changes(object):
                     # all copies match. Go and have a cup of tea.
                     pass
 
-                elif asset[SHA] != remote_p[path][SHA] and \
-                        asset[SHA] != local_p[path][SHA]:
+                elif asset[SHA] != remote_asset[SHA] and \
+                        asset[SHA] != local_asset[SHA]:
                     # both changed. Conflict!
-                    local_time = local_asset['time_modified']
-                    remote_time = remote_asset['time_modified']
+                    local_time = local_asset['date_modified']
+                    remote_time = remote_asset['date_modified']
                     local_path, remote_path = conflict_paths(path, local_time,
                                                              remote_time)
                     # rename the remote and local files with CONFLICT tag
@@ -236,7 +237,7 @@ class Changes(object):
                     self.add_index[remote_path] = remote_asset
                     self.add_index[local_path] = local_asset
 
-                elif asset[SHA] != remote_p[path][SHA]:
+                elif asset[SHA] != remote_asset[SHA]:
                     # changed remotely only
                     # TODO: we know the files differ and we presume the remote
                     # is the newer one. Could check the dat_modified?
@@ -244,13 +245,13 @@ class Changes(object):
                     self.update_local['path'] = remote_asset
                     self.update_index['path'] = remote_asset
 
-                elif asset[SHA] != local_p[path][SHA]:
+                elif asset[SHA] != local_asset[SHA]:
                     # changed locally only
                     # TODO: we know the files differ and we presume the local
                     # is the newer one. Could check the dat_modified?
                     # But if they differed wouldn't that mean a clock err?
                     # fetch the links from the remote so we can do an update op
-                    local_asset['links'] = remote_p[path]['links']
+                    local_asset['links'] = remote_asset['links']
                     self.update_remote['path'] = local_asset
                     self.update_index['path'] = local_asset
 
@@ -266,7 +267,7 @@ class Changes(object):
             elif path not in local_p.keys():
                 remote_asset = remote_p[path]
                 # code:101 has been deleted locally but exists remotely
-                if asset['date_modified'] < remote_p[path]['date_modified']:
+                if asset['date_modified'] < remote_asset['date_modified']:
                     # deleted locally but changed on remote. Recreate
                     # make new path and get the newer asset info
                     new_path = recreated_path(path)
@@ -286,18 +287,18 @@ class Changes(object):
             elif path not in remote_p.keys():
                 # has been deleted remotely but exists locally
                 # code:110
-                if asset['date_modified'] < local_p[path]['date_modified']:
+                local_asset = local_p[path]
+                if asset['date_modified'] < local_asset['date_modified']:
                     # deleted remotely but changed on local. Recreate
                     # make new path and get the newer asset info
                     new_path = recreated_path(path)
-                    new_asset = local_p[path]
                     # remote: rename (move) to include "_DELETED"
-                    self.mv_local[new_path] = new_asset
+                    self.mv_local[new_path] = local_asset
                     # index: remove old asset and add new one
                     self.del_index[asset['path']] = asset
-                    self.add_index[new_path] = new_asset
+                    self.add_index[new_path] = local_asset
                     # local: just add the new asset with new path
-                    self.add_remote[new_path] = new_asset
+                    self.add_remote[new_path] = local_asset
                 else:
                     # deleted remotely unchanged locally. Delete in both
                     self.del_index[asset['path']] = asset
@@ -335,15 +336,15 @@ def recreated_path(path):
     the name
     """
     root, ext = os.path.splitext(path)
-    return root+"_DELETED."+ext
+    return root+"_DELETED"+ext
 
 
 def conflict_paths(path, local_time, server_time):
     """
     """
     root, ext = os.path.splitext(path)
-    local = "{}_CONFLICT{}.{}".format(root, local_time, ext)
-    server = "{}_CONFLICT{}.{}".format(root, server_time, ext)
+    local = "{}_CONFLICT{}{}".format(root, local_time, ext)
+    server = "{}_CONFLICT{}{}".format(root, server_time, ext)
     return local, server
 
 

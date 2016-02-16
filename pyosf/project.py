@@ -154,7 +154,9 @@ class Project(object):
     def get_changes(self):
         """Return the changes to be applied
         """
-        osf_index = self.osf.index
-        local_index = self.local.create_index()
-        changes = sync.Changes(local_index, osf_index, self.index)
+        # make sure indices are up to date
+        self.local.rebuild_index()
+        self.osf.rebuild_index()
+        # then analyze
+        changes = sync.Changes(self.local.index, self.osf.index, self.index)
         return changes

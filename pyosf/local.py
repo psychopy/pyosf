@@ -15,8 +15,12 @@ class LocalFiles(object):
         self.sha_list = []
         # this should trigger the work to be done
         self.root_path = root_path
+        self._index = None
 
-    def create_index(self, path=None):
+    def rebuild_index(self):
+        self._index = self._create_index()
+
+    def _create_index(self, path=None):
         """Scans the tree of nodes recursively and returns
         file/folder details as a flat list of dicts
         """
@@ -35,7 +39,7 @@ class LocalFiles(object):
             else:
                 files = []
             # then find children as well
-            [files.extend(self.create_index(os.path.join(path, x)))
+            [files.extend(self._create_index(os.path.join(path, x)))
                 for x in os.listdir(path)]
             return files
         else:
@@ -45,6 +49,12 @@ class LocalFiles(object):
                 d[constants.SHA] = hash_func(f.read()).hexdigest()
             self.nFiles += 1
             return [d]
+
+    @property
+    def index(self):
+        if self._index is None:
+            self.rebuild_index()
+        return self._index
 
     @property
     def root_path(self):
@@ -60,7 +70,6 @@ class LocalFiles(object):
         self._nFiles = 0
         self._nFolders = 0
         self.md5_list = []
-        self.index = self.create_index()
 
     def save(self, filename):
         """Save the tree of this path to a json file

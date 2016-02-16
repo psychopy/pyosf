@@ -6,7 +6,7 @@ Created on Fri Feb  5 16:01:26 2016
 """
 from __future__ import absolute_import, print_function
 
-from pyosf import remote, project, constants
+from pyosf import remote, project, constants, tools
 import time
 import os
 from os.path import join
@@ -36,7 +36,9 @@ class TestProjectChanges():
 
     def teardown_class(self):
         # take a copy of the remote project files to revert to later
-        shutil.copytree(self.proj_root, 'safeplace')
+        if os.path.isdir('EndOfLastTest'):
+            shutil.rmtree('EndOfLastTest')  # start with no project root
+        shutil.copytree(self.proj_root, 'EndOfLastTest')
         shutil.rmtree(self.proj_root)
         shutil.copytree(self.safe_copy, self.proj_root)
         # perform a sync with remote to reset all the files there
@@ -49,6 +51,7 @@ class TestProjectChanges():
         self.tmp_folder = join(self.this_dir, "tmp")
         self.proj_file = join(self.this_dir, "tmp", "test.proj")
         self.proj_root = join(self.this_dir, "tmp", "files")
+        self.safe_copy = join(self.tmp_folder, "files_copy")
 
         if os.path.isfile(self.proj_file):
             os.remove(self.proj_file)  # start with no project file
@@ -90,7 +93,6 @@ class TestProjectChanges():
         print_all_changes(changes)
 
         # take a copy of the remote project files to revert to later
-        self.safe_copy = join(self.tmp_folder, "files_copy")
         if os.path.isdir(self.safe_copy):
             shutil.rmtree(self.safe_copy)
         shutil.copytree(self.proj_root, self.safe_copy)
@@ -109,8 +111,8 @@ class TestProjectChanges():
             for ref in gc.get_referrers(changes):
                 print(namestr(ref, locals()))
 
-    def test_add_and_remove_remote(self):
-        # add a folder and some files locally
+    def test_add_and_remove_local(self):
+        # add a folder and some files locally to propogate to remote
         print("Creating new files locally")
         orig = join(self.proj_root, 'visual')
         new = join(self.proj_root, 'visual2')
@@ -121,6 +123,37 @@ class TestProjectChanges():
         proj = project.Project(project_file=self.proj_file)
         do_sync(proj)
         proj.save()
+        print("Removing files locally")
+        #then remove the folder and do the sync again
+        shutil.rmtree(new)
+        do_sync(proj)
+        proj.save()
+
+    def test_add_and_remove_remote(self):
+        test_path = 'newFolder/testTextFile.txt'
+        # add a folder and file remotely to propogate to local
+        proj = project.Project(project_file=self.proj_file)
+        # take an arbitrary file from local give a new path and push to remote
+        asset = tools.find_by_key(proj.local.index, 'path', 'README.txt')
+        new_asset = copy.copy(asset)
+        # change 'path' for upload but 'full_path' points to orig
+        new_asset['path'] = test_path
+        proj.osf.add_file(new_asset)
+        proj = None  # discard and recreate
+
+        # now create proj and do sync
+        proj = project.Project(project_file=self.proj_file)
+        do_sync(proj)
+        proj.save()
+
+        print("Removing a file and folder remotely")
+        # remove folder and file remotely and propogate to local
+        asset = tools.find_by_key(proj.osf.index, 'path', test_path)
+        proj.osf.del_file(asset)
+        container, name = os.path.split(test_path)
+        asset = tools.find_by_key(proj.osf.index, 'path', container)
+        proj.osf.del_file(asset)
+
 
     def test_conflict(self):
         proj = project.Project(project_file=self.proj_file)
@@ -189,5 +222,5 @@ if __name__ == "__main__":
         console = logging.getLogger()
     console.setLevel(logging.INFO)
     import pytest
-    pytest.main(args=[__file__+"::TestProjectChanges::test_conflict", '-s'])
+    pytest.main(args=[__file__+"::TestProjectChanges::test_remote_updated", '-s'])
 #    pytest.main(args=[__file__, '-s'])
