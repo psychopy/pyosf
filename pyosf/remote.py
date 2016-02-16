@@ -599,7 +599,7 @@ class OSFProject(Node):
         container_path, name = os.path.split(path)
         if container_path == "":  # we reached the root of the node
             url_create = self.links['new_folder']
-            node = self
+            asset = self.as_asset()
         else:
             if container_path not in self.containers:
                 logging.info("Needing new folder: {}".format(container_path))
@@ -610,20 +610,20 @@ class OSFProject(Node):
                 container = self.containers[container_path]
                 logging.info("Using existing {}".format(container))
 
-        url = "{}&name={}".format(url_create, name)
-        reply = self.session.put(url)
-        if reply.status_code == 409:
-            # conflict code indicating the folder does exist
-            print("err 409:", path, self.containers)
-            print(self.links)
-        elif reply.status_code not in [200, 201]:  # some other problem
-            raise HTTPSError("URL:{}\nreply:{}".format(url,
-                             json.dumps(reply.json(), indent=2)))
-        else:
-            reply_json = reply.json()['data']
-        asset = FileNode(self.session, reply_json).as_asset()
-        logging.info("created remote {} with path={}"
-                     .format(node.kind, node.path))
+            url = "{}&name={}".format(url_create, name)
+            reply = self.session.put(url)
+            if reply.status_code == 409:
+                # conflict code indicating the folder does exist
+                print("err 409:", path, self.containers)
+                print(self.links)
+            elif reply.status_code not in [200, 201]:  # some other problem
+                raise HTTPSError("URL:{}\nreply:{}".format(url,
+                                 json.dumps(reply.json(), indent=2)))
+            else:
+                reply_json = reply.json()['data']
+            asset = FileNode(self.session, reply_json).as_asset()
+            logging.info("created remote {} with path={}"
+                         .format(node.kind, node.path))
         self.containers[path] = asset
         return asset
 
