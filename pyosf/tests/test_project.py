@@ -160,12 +160,12 @@ class TestProjectChanges():
             if asset['path'].endswith(filename):
                 break
         path = asset['full_path']
+        if constants.PY3:
+            mode = 'at'
+        else:
+            mode = 'ab'
         if remote_change:
             # modify it
-            if constants.PY3:
-                mode = 'at'
-            else:
-                mode = 'ab'
             with open(path, mode) as f:
                 f.write("A bit of text added remotely. ")
             # get the new SHA (needed to verify successful upload)
