@@ -11,7 +11,6 @@ Created on Sun Feb  7 21:31:15 2016
 @author: lpzjwp
 """
 
-
 from __future__ import absolute_import, print_function
 import os
 import requests
@@ -308,6 +307,7 @@ class Node(object):
             reply = self.session.get(id)
             if reply.status_code == 200:
                 self.json = reply.json()['data']
+                id = self.json['id']
             else:
                 raise HTTPSError("Failed to create session from OSF_id:\n{}"
                                  .format(reply))
@@ -318,8 +318,8 @@ class Node(object):
             if reply.status_code == 200:
                 self.json = reply.json()['data']
             else:
-                raise HTTPSError("Failed to create session from OSF_id:" +
-                                 reply)
+                raise HTTPSError("Failed to create session from OSF_id: {}"
+                                 .format(reply))
         # also get info about files if possible
         files_reply = self.session.get("{}/nodes/{}/files"
                                        .format(constants.API_BASE, id))
@@ -368,25 +368,27 @@ class Node(object):
 
         child_list = []
         for node in req.json()['data']:
-            child_list.append(Node(node["id"]))
+            child_list.append(Node(session=self.session, id=node["id"]))
         return child_list
 
     @property
     def parent(self):
         """Returns a new Node of the parent object or None
         """
-        links = self.json['relationships']['parent']['links']
-        if 'self' in links:
-            parent_URL = links['self']['href']
-        elif 'related' in links:
-            parent_URL = links['related']['href']
-        else:
-            parent_URL = None
+        parent_URL = None  # unless we can find one somewhere!
+        relations = self.json['relationships']
+        if 'parent' in relations:
+            links = relations['parent']['links']
+            if 'self' in links:
+                parent_URL = links['self']['href']
+            elif 'related' in links:
+                parent_URL = links['related']['href']
+
         # not sure if the above is the only reason that the URL could be None
         if parent_URL is None:
             return None
         else:
-            return Node(parent_URL)
+            return Node(session=self.session, id=parent_URL)
 
     def _node_file_list(self, url):
         """Returns all the files within a node (including sub-folders)
@@ -695,10 +697,6 @@ class OSFProject(Node):
                """ % (new_name)
         reply = self.session.post(url_move, data=body)
         if reply.status_code not in [200, 201]:
-            print("ASSET:", asset)
-            for ass in self.index:
-                print(ass['path'])
-            print("")
             raise HTTPSError("Failed remote file move URL:{}\nreply:{}"
                              .format(url_move,
                                      json.dumps(reply.json(), indent=2)))

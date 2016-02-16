@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
 """
-Created on Fri Feb  5 16:01:26 2016
+Part of the pyosf package
+https://github.com/psychopy/pyosf/
 
-@author: lpzjwp
+Released under MIT license
+
+@author: Jon Peirce
 """
-from __future__ import absolute_import, print_function
 
+from __future__ import absolute_import, print_function
 from pyosf import remote
 
 printing = True
@@ -44,19 +47,23 @@ class TestSession(object):
 
     def test_search_me(self):
         print("Finding projects for 'me' ({})".format(self.session.username))
-        userProjects = self.session.find_user_projects()
+        userProjects = self.session.find_my_projects()
         for proj in userProjects:
             if printing:
                 print(" - {}: {}".format(proj.id, proj.title))
 
     def test_file_listing(self):
-        proj_id = 'qgt58'
+        # will use a public project with child nodes
+        proj_id = 'https://api.osf.io/v2/nodes/nqwss'  # Jons silencing project
         print("\n** Finding Files **")
-        proj = self.session.open_project(proj_id)
+        proj = self.session.open_project(proj_id)  # testing request by https
         print(repr(proj), proj.title, "nodes:")
         for this_child in proj.children:
             print(' {} ({}), parent={}'
                   .format(this_child.title, this_child, this_child.parent))
+        for attr_name in dir(this_child):
+            attr = getattr(this_child, attr_name)
+            print("{}.{} = {}".format(this_child.title, attr_name, attr))
 
         # look at some file objects for proj
         print(repr(proj), proj.title, "files:")

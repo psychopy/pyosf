@@ -9,7 +9,6 @@ Released under MIT license
 """
 
 from __future__ import absolute_import, print_function
-
 from pyosf import remote, project, constants, tools
 import time
 import os
@@ -184,7 +183,7 @@ class TestProjectChanges():
         # make changes to both and test sync
         self._make_changes(self.proj, fname,
                            local_change=False, remote_change=True)
-        print("Sync with a local update")
+        print("Sync with a remote update")
         do_sync(self.proj)
 
     def _make_changes(self, proj, filename,
@@ -206,13 +205,7 @@ class TestProjectChanges():
             # modify it
             with open(path, mode) as f:
                 f.write("A bit of text added remotely. ")
-            # get the new SHA (needed to verify successful upload)
-            new_asset = copy.copy(proj.osf.find_asset(asset['path']))
-            new_asset['full_path'] = asset['full_path']
-            with open(path, "rb") as f:
-                hash_func = getattr(hashlib, constants.SHA.lower())
-                new_asset[constants.SHA] = hash_func(f.read()).hexdigest()
-            proj.osf.add_file(new_asset, update=True)
+            proj.osf.add_file(asset, update=True)
         if local_change:
             # change again locally
             with open(path, mode) as f:
@@ -227,5 +220,5 @@ if __name__ == "__main__":
         console = logging.getLogger()
     console.setLevel(logging.INFO)
     import pytest
-#    pytest.main(args=[__file__+"::TestProjectChanges::test_conflict", '-s'])
-    pytest.main(args=[__file__, '-s'])
+    pytest.main(args=[__file__+"::TestProjectChanges::test_local_updated", '-s'])
+#    pytest.main(args=[__file__, '-s'])

@@ -10,14 +10,13 @@
   [o] test cases:
     [x] 111 conflict
     [x] 111 update local
-    [x] 111 update remote
-    [] 100  [remove from index. Don't need to test?]
-    [] 101 deleted local but changed remotely
-    [] 110 deleted remotely but changed locally
-    [] 011 added in remote and local
-    [] 010 added locally
-    [] 001 added remotely
-
+    [ ] 111 update remote
+    [x] 100  [remove from index. Don't need to test?]
+    [x] 101 deleted local but changed remotely
+    [ ] 110 deleted remotely but changed locally
+    [x] 011 added in remote and local
+    [x] 010 added locally
+    [x] 001 added remotely
 
 
   [ ]  exclude 'ignore' paths from indexing

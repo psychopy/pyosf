@@ -8,6 +8,7 @@ Released under MIT license
 @author: Jon Peirce
 """
 
+from __future__ import absolute_import, print_function
 
 def find_by_key(in_list, key, val):
     """Returns the first item with key matching val
