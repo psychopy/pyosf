@@ -172,7 +172,7 @@ class TestProjectChanges():
         do_sync(self.proj)
 
     def test_local_updated(self):
-        fname = 'lower_level.txt'
+        fname = 'lowerLevel.txt'
         # make changes to both and test sync
         self._make_changes(self.proj, fname,
                            local_change=True, remote_change=False)
