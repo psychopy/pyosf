@@ -65,8 +65,12 @@ class TestSession(object):
             if n > 5:
                 print('...')
                 break
-            print(' - ', this_file['name'], this_file['kind'],
-                  this_file['size'], this_file['path'])
+            if this_file['kind'] == 'file':
+                size = "{}bytes".format(this_file['size'])
+            else:
+                size = ""
+            print(' - {} ({},)'.format(this_file['path'],
+                                       this_file['kind'], size))
 
 if __name__ == "__main__":
     import pytest
