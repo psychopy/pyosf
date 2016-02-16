@@ -220,10 +220,6 @@ class Changes(object):
                     # and swap the version from the other side
                     self.add_local[remote_path] = remote_asset
                     self.add_remote[local_path] = local_asset
-                    # and update index
-                    self.del_index[asset['path']] = asset
-                    self.add_index[remote_path] = remote_asset
-                    self.add_index[local_path] = local_asset
 
                 elif asset[SHA] != remote_asset[SHA]:
                     # changed remotely only
@@ -231,7 +227,6 @@ class Changes(object):
                     # is the newer one. Could check the date_modified?
                     # But if they differed wouldn't that mean a clock err?
                     self.update_local['path'] = remote_asset
-                    self.update_index['path'] = remote_asset
 
                 elif asset[SHA] != local_asset[SHA]:
                     # changed locally only
@@ -241,7 +236,6 @@ class Changes(object):
                     # fetch the links from the remote so we can do an update op
                     local_asset['links'] = remote_asset['links']
                     self.update_remote['path'] = local_asset
-                    self.update_index['path'] = local_asset
 
                 # don't re-analyze
                 del local_p[path]
@@ -249,8 +243,8 @@ class Changes(object):
 
             elif path not in remote_p.keys() and path not in local_p.keys():
                 # code:100
-                # Was deleted in both. Safe to remove from index
-                self.del_index[path] = asset
+                # Was deleted in both. Forget about it
+                pass
 
             elif path not in local_p.keys():
                 remote_asset = remote_p[path]
@@ -263,12 +257,8 @@ class Changes(object):
                     # local: just add the new asset with new path
                     self.add_local[new_path] = remote_asset
                     self.mv_remote[new_path] = remote_asset
-                    # index: remove old asset and add new one
-                    self.del_index[asset['path']] = asset
-                    self.add_index[new_path] = remote_asset
                 else:
-                    # deleted locally unchanged remotely. Delete in both
-                    self.del_index[asset['path']] = asset
+                    # deleted locally unchanged remotely. Delete remotely
                     self.del_remote[asset['path']] = remote_asset
                 del remote_p[path]  # remove so we don't re-analyze
 
@@ -282,14 +272,10 @@ class Changes(object):
                     new_path = recreated_path(path)
                     # remote: rename (move) to include "_DELETED"
                     self.mv_local[new_path] = local_asset
-                    # index: remove old asset and add new one
-                    self.del_index[asset['path']] = asset
-                    self.add_index[new_path] = local_asset
                     # local: just add the new asset with new path
                     self.add_remote[new_path] = local_asset
                 else:
-                    # deleted remotely unchanged locally. Delete in both
-                    self.del_index[asset['path']] = asset
+                    # deleted remotely unchanged locally. Delete locally
                     self.del_local[asset['path']] = asset
                 del local_p[path]  # remove so we don't re-analyse
 
@@ -305,17 +291,15 @@ class Changes(object):
                 # code:011
                 if remote_asset[SHA] == local_asset[SHA]:
                     # both copies match but not in index (user uplaoded?)
-                    self.add_index[path] = local_asset
+                    pass  # nothing to do
                 del remote_p[path]
             else:
                 # code:010
-                self.add_index[path] = local_asset
                 self.add_remote[path] = local_asset
 
         # go through the files in the remote
         for path, remote_asset in remote_p.items():
             # code:001 has been created remotely
-            self.add_index[path] = remote_asset
             self.add_local[path] = remote_asset
 
 
