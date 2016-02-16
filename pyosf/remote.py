@@ -22,8 +22,6 @@ except ImportError:
 from . import constants
 from .tools import dict_from_list, find_by_key
 
-PY3 = sys.version_info > (3,)
-
 
 class AuthError(Exception):
     """Authentication error while connecting to the OSF"""
@@ -66,7 +64,7 @@ class TokenStorage(dict):
             os.makedirs(constants.PYOSF_FOLDER)
         with open(filename, 'wb') as f:
             json_str = json.dumps(self)
-            if PY3:
+            if constants.PY3:
                 f.write(bytes(json_str, 'UTF-8'))
             else:
                 f.write(json_str)

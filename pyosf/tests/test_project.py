@@ -109,7 +109,7 @@ class TestProjectChanges():
             for ref in gc.get_referrers(changes):
                 print(namestr(ref, locals()))
 
-    def test_new_to_remote(self):
+    def test_add_and_remove_remote(self):
         # add a folder and some files locally
         print("Creating new files locally")
         orig = join(self.proj_root, 'visual')
@@ -162,7 +162,11 @@ class TestProjectChanges():
         path = asset['full_path']
         if remote_change:
             # modify it
-            with open(path, 'ab') as f:
+            if constants.PY3:
+                mode = 'at'
+            else:
+                mode = 'ab'
+            with open(path, mode) as f:
                 f.write("A bit of text added remotely. ")
             # get the new SHA (needed to verify successful upload)
             new_asset = copy.copy(proj.osf.find_asset(asset['path']))
