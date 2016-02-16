@@ -151,8 +151,7 @@ class Changes(object):
 
     def apply_update_remote(self, proj, asset, new_path=None):
         proj.osf.add_file(asset, update=True)
-        logging.info("Sync: Update file remote: {} -> {}"
-                     .format(asset['path']))
+        logging.info("Sync: Update file remote: {}".format(asset['path']))
         return 1
 
     def apply(self, proj):
