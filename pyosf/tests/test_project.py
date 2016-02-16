@@ -177,7 +177,7 @@ class TestProjectChanges():
             proj.osf.add_file(new_asset, update=True)
         if local_change:
             # change again locally
-            with open(path, 'ab') as f:
+            with open(path, mode) as f:
                 f.write("A bit of text added locally. ")
 
 if __name__ == "__main__":
