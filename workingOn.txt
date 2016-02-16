@@ -7,13 +7,17 @@
   [x] analyse files to sync
   [x] uploading files to the remote
 
-  [o] apply changes to local/remote
+  [o] test cases:
     [x] 111 conflict
     [x] 111 update local
     [x] 111 update remote
     [] 100  [remove from index. Don't need to test?]
-    [x] 110
-    [x] 101
+    [] 101 deleted local but changed remotely
+    [] 110 deleted remotely but changed locally
+    [] 011 added in remote and local
+    [] 010 added locally
+    [] 001 added remotely
+
 
 
   [ ]  exclude 'ignore' paths from indexing

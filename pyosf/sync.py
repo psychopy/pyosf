@@ -50,7 +50,7 @@ class Changes(object):
         self._change_types = []
         # order is determined by the conflict cases (requires most change)
         for action in ['add', 'mv', 'update', 'del']:
-            for target in ['local', 'remote', 'index']:
+            for target in ['local', 'remote']:
                 self._change_types.append("{}_{}".format(action, target))
         self._set_empty()
         self.local_index = local_index
@@ -60,7 +60,7 @@ class Changes(object):
 
     def __str__(self):
         s = "\t Add\t Del\t Mv\t Update\n"
-        for kind in ['local', 'remote', 'index']:
+        for kind in ['local', 'remote']:
             s += "{}\t {:n}\t {:n}\t {:n}\t {:n}\n".format(
                 kind,
                 len(getattr(self, "add_{}".format(kind))),
@@ -109,28 +109,20 @@ class Changes(object):
         logging.info("Added {} to remote: {}".format(asset['kind'], new_path))
         return 1
 
-    def apply_add_index(self, proj, asset, new_path=None):
-        # proj.index.append(asset)
-        # logging.info("Added file to index: {}".format(asset['path']))
-        return 1
-
     def apply_mv_local(self, proj, asset, new_path):
         full_path_new = os.path.join(proj.local.root_path, new_path)
         full_path_old = os.path.join(proj.local.root_path, asset['path'])
         shutil.move(full_path_old, full_path_new)
         asset['path'] = new_path
-        logging.info("Moved file locally: {} -> {}"
+        logging.info("Sync: Moved file locally: {} -> {}"
                      .format(asset['full_path'], new_path))
         return 1
 
     def apply_mv_remote(self, proj, asset, new_path):
         new_folder, new_name = os.path.split(new_path)
-        proj.osf.move_file(asset, new_path)
-        return 1
-
-    def apply_mv_index(self, proj, asset, new_path):
-        # for the index replacing with the new asset is the same as moving
-        # self.apply_update_index(proj, asset, new_path)
+        proj.osf.rename_file(asset, new_path)
+        logging.info("Sync: Moved file remote: {} -> {}"
+                     .format(asset['path'], new_path))
         return 1
 
     def apply_del_local(self, proj, asset, new_path=None):
@@ -144,11 +136,8 @@ class Changes(object):
 
     def apply_del_remote(self, proj, asset, new_path=None):
         proj.osf.del_file(asset)
-        return 1
-
-    def apply_del_index(self, proj, asset, new_path=None):
-        # proj.index.remove(asset)
-        # logging.info("Removed file from index: {}".format(asset['path']))
+        logging.info("Sync: Del file remote: {}"
+                     .format(asset['path']))
         return 1
 
     def apply_update_local(self, proj, asset, new_path=None):
@@ -162,16 +151,8 @@ class Changes(object):
 
     def apply_update_remote(self, proj, asset, new_path=None):
         proj.osf.add_file(asset, update=True)
-        return 1
-
-    def apply_update_index(self, proj, asset, new_path=None):
-        # remove the asset with that path and add new asset to proj.index
-        #   path = asset['path']
-        #   index = proj.index
-        #   # use a python "generator expression" to find old asset
-        #   old_asset = (item for item in index if item["path"] == path).next()
-        #   proj.index.remove(old_asset)
-        #   proj.index.append(asset)
+        logging.info("Sync: Update file remote: {} -> {}"
+                     .format(asset['path']))
         return 1
 
     def apply(self, proj):
@@ -247,7 +228,7 @@ class Changes(object):
                 elif asset[SHA] != remote_asset[SHA]:
                     # changed remotely only
                     # TODO: we know the files differ and we presume the remote
-                    # is the newer one. Could check the dat_modified?
+                    # is the newer one. Could check the date_modified?
                     # But if they differed wouldn't that mean a clock err?
                     self.update_local['path'] = remote_asset
                     self.update_index['path'] = remote_asset
@@ -255,7 +236,7 @@ class Changes(object):
                 elif asset[SHA] != local_asset[SHA]:
                     # changed locally only
                     # TODO: we know the files differ and we presume the local
-                    # is the newer one. Could check the dat_modified?
+                    # is the newer one. Could check the date_modified?
                     # But if they differed wouldn't that mean a clock err?
                     # fetch the links from the remote so we can do an update op
                     local_asset['links'] = remote_asset['links']

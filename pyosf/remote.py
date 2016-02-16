@@ -309,8 +309,8 @@ class Node(object):
             if reply.status_code == 200:
                 self.json = reply.json()['data']
             else:
-                raise HTTPSError("Failed to create session from OSF_id:" +
-                                 reply)
+                raise HTTPSError("Failed to create session from OSF_id:\n{}"
+                                 .format(reply))
         else:
             # treat as OSF id and fetch the URL
             reply = self.session.get("{}/nodes/{}/"
@@ -683,23 +683,16 @@ class OSFProject(Node):
                             "Maybe it didn't fully upload?")
         return node
 
-    def move_file(self, asset, new_path):
+    def rename_file(self, asset, new_path):
         # ensure the target location exists
         new_folder, new_name = os.path.split(new_path)
-        if new_folder not in self.containers:
-            folder_asset = self.add_container(new_folder)
-        else:
-            folder_asset = self.containers[new_folder]
-
         # get the url and perform the move
         url_move = asset['links']['move']
-        # TODO: for file to move to different node (rather than a folder within
-        # a node) we need to find the node id for that container (use links?)
-        body = """{"action":   "move",
-                "path":     "/%s",
-                "rename":   "%s",
-                "conflict": "replace"}
-               """ % (new_folder, new_name)
+        # there's actually a more complicated version allowing a *move*
+        # (change of location) but we're just using rename
+        body = """{"action":   "rename",
+                "rename":   "%s"}
+               """ % (new_name)
         reply = self.session.post(url_move, data=body)
         if reply.status_code not in [200, 201]:
             print("ASSET:", asset)
