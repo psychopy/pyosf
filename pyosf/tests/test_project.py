@@ -1,9 +1,13 @@
 # -*- coding: utf-8 -*-
 """
-Created on Fri Feb  5 16:01:26 2016
+Part of the pyosf package
+https://github.com/psychopy/pyosf/
 
-@author: lpzjwp
+Released under MIT license
+
+@author: Jon Peirce
 """
+
 from __future__ import absolute_import, print_function
 
 from pyosf import remote, project, constants, tools
@@ -34,12 +38,25 @@ def print_all_changes(changes):
 
 class TestProjectChanges():
 
+    def setup(self):
+        # this is done individually for every test
+        self.proj = project.Project(project_file=self.proj_file)
+
+    def teardown(self):
+        if self.proj is not None:
+            self.proj.osf.rebuild_index()
+            print("Project state:")
+            for asset in self.proj.index:
+                print(" - {}".format(asset['path']))
+        self.proj = None
+
     def teardown_class(self):
+        self.proj = None
         # take a copy of the remote project for reference
         if os.path.isdir('EndOfLastTest'):
             shutil.rmtree('EndOfLastTest')  # start with no project root
         shutil.copytree(self.proj_root, 'EndOfLastTest')
-        #revert the local project to original state
+        # revert the local project to original state
         if os.path.isdir(self.proj_root):
             shutil.rmtree(self.proj_root)  # start with no project root
         shutil.copytree(self.files_orig, self.proj_root)
@@ -102,13 +119,8 @@ class TestProjectChanges():
             return [name for name in namespace if namespace[name] is obj]
 
         # check that nothing else has created a ref to changes (no circular)
-        proj = project.Project(project_file=self.proj_file)
-        changes = proj.get_changes()
-        assert len(gc.get_referrers(changes)) == 1
-        del proj
-        if len(gc.get_referrers(changes)) > 0:
-            for ref in gc.get_referrers(changes):
-                print(namestr(ref, locals()))
+        changes = self.proj.get_changes()
+        assert len(gc.get_referrers(changes)) == 1  # just one ref (ours!)
 
     def test_add_and_remove_local(self):
         # add a folder and some files locally to propogate to remote
@@ -119,67 +131,61 @@ class TestProjectChanges():
             shutil.rmtree(new)
         shutil.copytree(orig, new)
         # sync with the new files to test upload and folder creation
-        proj = project.Project(project_file=self.proj_file)
-        do_sync(proj)
-        proj.save()
+        do_sync(self.proj)
+        self.proj.save()
         print("Removing files locally")
-        #then remove the folder and do the sync again
+        # then remove the folder and do the sync again
         shutil.rmtree(new)
-        do_sync(proj)
-        proj.save()
+        do_sync(self.proj)
+        self.proj.save()
 
     def test_add_and_remove_remote(self):
         test_path = 'newFolder/testTextFile.txt'
         # add a folder and file remotely to propogate to local
-        proj = project.Project(project_file=self.proj_file)
         # take an arbitrary file from local give a new path and push to remote
-        asset = tools.find_by_key(proj.local.index, 'path', 'README.txt')
+        asset = tools.find_by_key(self.proj.local.index, 'path', 'README.txt')
         new_asset = copy.copy(asset)
         # change 'path' for upload but 'full_path' points to orig
         new_asset['path'] = test_path
-        proj.osf.add_file(new_asset)
-        proj = None  # discard and recreate
+        self.proj.osf.add_file(new_asset)
+        self.proj = None  # discard and recreate
 
         # now create proj and do sync
-        proj = project.Project(project_file=self.proj_file)
-        do_sync(proj)
-        proj.save()
+        self.proj = project.Project(project_file=self.proj_file)
+        do_sync(self.proj)
+        self.proj.save()
 
         print("Removing a file and folder remotely")
         # remove folder and file remotely and propogate to local
-        asset = tools.find_by_key(proj.osf.index, 'path', test_path)
-        proj.osf.del_file(asset)
+        asset = tools.find_by_key(self.proj.osf.index, 'path', test_path)
+        self.proj.osf.del_file(asset)
         container, name = os.path.split(test_path)
-        asset = tools.find_by_key(proj.osf.index, 'path', container)
-        proj.osf.del_file(asset)
-
+        asset = tools.find_by_key(self.proj.osf.index, 'path', container)
+        self.proj.osf.del_file(asset)
 
     def test_conflict(self):
-        proj = project.Project(project_file=self.proj_file)
         fname = 'text_in_visual.txt'
         # make changes to both and test sync
-        self._make_changes(proj, fname,
+        self._make_changes(self.proj, fname,
                            local_change=True, remote_change=True)
         print("Doing conflicted sync")
-        do_sync(proj)
+        do_sync(self.proj)
 
     def test_local_updated(self):
-        proj = project.Project(project_file=self.proj_file)
         fname = 'lower_level.txt'
         # make changes to both and test sync
-        self._make_changes(proj, fname,
+        self._make_changes(self.proj, fname,
                            local_change=True, remote_change=False)
         print("Sync with a local update")
-        do_sync(proj)
+        do_sync(self.proj)
 
     def test_remote_updated(self):
-        proj = project.Project(project_file=self.proj_file)
         fname = 'README.txt'
         # make changes to both and test sync
-        self._make_changes(proj, fname,
+        self._make_changes(self.proj, fname,
                            local_change=False, remote_change=True)
         print("Sync with a local update")
-        do_sync(proj)
+        do_sync(self.proj)
 
     def _make_changes(self, proj, filename,
                       local_change=True, remote_change=True):
@@ -221,5 +227,5 @@ if __name__ == "__main__":
         console = logging.getLogger()
     console.setLevel(logging.INFO)
     import pytest
-    pytest.main(args=[__file__+"::TestProjectChanges::test_remote_updated", '-s'])
-#    pytest.main(args=[__file__, '-s'])
+#    pytest.main(args=[__file__+"::TestProjectChanges::test_conflict", '-s'])
+    pytest.main(args=[__file__, '-s'])

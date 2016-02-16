@@ -1,18 +1,23 @@
-
+# -*- coding: utf-8 -*-
 """Classes and functions to access remote (https://OSF.io) projects
+
+Part of the pyosf package
+https://github.com/psychopy/pyosf/
+
+Released under MIT license
+
+Created on Sun Feb  7 21:31:15 2016
+
+@author: lpzjwp
 """
 
-# License info: the code for Session.authenticate() is derived from the code
-# in https://github.com/CenterForOpenScience/osf-sync/blob/develop/...
-#    /osfoffline/utils/authentication.py
 
 from __future__ import absolute_import, print_function
 import os
-import sys
-import time
 import requests
 import json
 import datetime
+import hashlib
 try:
     from psychopy import logging
     console = logging.console
@@ -178,7 +183,7 @@ class Session(requests.Session):
         # then populate self.userID and self.userName
         resp = self.get(constants.API_BASE+"/users/me/")
         if resp.status_code != 200:
-            raise AuthError('Invalid credentials trying to fetch user data:\n{}'
+            raise AuthError('Invalid credentials trying to get user data:\n{}'
                             .format(resp.json()))
         else:
             logging.info("Successful authentication with token")
@@ -603,12 +608,13 @@ class OSFProject(Node):
         if path in self.containers:
             return self.containers[path]  # nothing to do, return the container
 
-        container_path, name = os.path.split(path)
-        if container_path == "":  # we reached the root of the node
-            url_create = self.links['new_folder']
+        if path == "":
             asset = self.as_asset()
         else:
-            if container_path not in self.containers:
+            container_path, name = os.path.split(path)
+            if container_path == "":  # we reached the root of the node
+                url_create = self.links['new_folder']
+            elif container_path not in self.containers:
                 logging.info("Needing new folder: {}".format(container_path))
                 container = self.add_container(container_path)
                 logging.info("Basing it in {}".format(container))
@@ -630,7 +636,7 @@ class OSFProject(Node):
                 reply_json = reply.json()['data']
             asset = FileNode(self.session, reply_json).as_asset()
             logging.info("created remote {} with path={}"
-                         .format(node.kind, node.path))
+                         .format(asset['kind'], asset['path']))
         self.containers[path] = asset
         return asset
 
@@ -639,18 +645,21 @@ class OSFProject(Node):
         """
         return find_by_key(self.index, 'path', path)
 
-    def add_file(self, asset, update=False):
+    def add_file(self, asset, update=False, new_path=None):
         """Adds the file to the OSF project.
         If containing folder doesn't exist then it will be created recursively
 
         update is used if the file already exists but needs updating (version
         will be incremented).
         """
+        local_path = asset['full_path']
+        if new_path is None:
+            new_path = asset['path']
         if update:
             url_upload = asset['links']['upload']
             logging.info("Updating file : {}".format(asset['path']))
         else:
-            container, name = os.path.split(asset['path'])
+            container, name = os.path.split(new_path)
             folder_asset = self.add_container(container)
             url_upload = folder_asset['links']['upload']
             if not url_upload.endswith("?kind=file"):
@@ -658,16 +667,18 @@ class OSFProject(Node):
             url_upload += "&name={}".format(name)
             # do the upload
             logging.info("Uploading file {} to container:{}"
-                         .format(name, folder_asset))
-        with open(asset['full_path'], 'rb') as f:
+                         .format(name, folder_asset['path']))
+        with open(local_path, 'rb') as f:
             reply = self.session.put(url_upload, data=f)
+        with open(local_path, 'rb') as f:
+            local_md5 = hashlib.md5(f.read()).hexdigest()
         if reply.status_code not in [200, 201]:
             raise HTTPSError("URL:{}\nreply:{}"
                              .format(url_upload,
                                      json.dumps(reply.json(), indent=2)))
         node = FileNode(self.session, reply.json()['data'])
-        if asset[constants.SHA] != \
-                node.json['attributes']['extra']['hashes'][constants.SHA]:
+
+        if local_md5 != node.json['attributes']['extra']['hashes']['md5']:
             raise Exception("Uploaded file did not match existing SHA. "
                             "Maybe it didn't fully upload?")
         return node
@@ -687,11 +698,14 @@ class OSFProject(Node):
         body = """{"action":   "move",
                 "path":     "/%s",
                 "rename":   "%s",
-                "conflict": "replace",
-                "resource": "%s"}
-               """ % (new_folder, new_name, folder_asset['id'])
+                "conflict": "replace"}
+               """ % (new_folder, new_name)
         reply = self.session.post(url_move, data=body)
         if reply.status_code not in [200, 201]:
+            print("ASSET:", asset)
+            for ass in self.index:
+                print(ass['path'])
+            print("")
             raise HTTPSError("Failed remote file move URL:{}\nreply:{}"
                              .format(url_move,
                                      json.dumps(reply.json(), indent=2)))

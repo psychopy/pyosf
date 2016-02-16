@@ -8,6 +8,13 @@
   [x] uploading files to the remote
 
   [o] apply changes to local/remote
+    [x] 111 conflict
+    [x] 111 update local
+    [x] 111 update remote
+    [] 100  [remove from index. Don't need to test?]
+    [x] 110
+    [x] 101
+
 
   [ ]  exclude 'ignore' paths from indexing
   [ ]  what happens when not connected?

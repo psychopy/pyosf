@@ -1,3 +1,15 @@
+# -*- coding: utf-8 -*-
+"""Class to track local files
+
+Part of the pyosf package
+https://github.com/psychopy/pyosf/
+
+Released under MIT license
+
+Created on Sun Feb  7 21:31:15 2016
+
+@author: lpzjwp
+"""
 
 from __future__ import absolute_import, print_function
 import os

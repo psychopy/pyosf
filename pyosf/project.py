@@ -1,6 +1,18 @@
-"""These are the main classes to be used by external scripts/apps
-"""
+# -*- coding: utf-8 -*-
+"""The main classes needed by external scripts
 
+The Project class tracks a `remote.Project()` and `local.LocalFiles` objects
+and compares them using `sync.Changes()`
+
+Part of the pyosf package
+https://github.com/psychopy/pyosf/
+
+Released under MIT license
+
+Created on Sun Feb  7 21:31:15 2016
+
+@author: lpzjwp
+"""
 from __future__ import absolute_import, print_function
 import os
 import sys

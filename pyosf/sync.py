@@ -1,7 +1,11 @@
 # -*- coding: utf-8 -*-
-"""
-These are the functions to perform the sync itself given a pair of file
+"""The functions to perform the sync itself given a pair of file
 listings (remote and local) and a copy of the previous state (db)
+
+Part of the pyosf package
+https://github.com/psychopy/pyosf/
+
+Released under MIT license
 
 Created on Sun Feb  7 21:31:15 2016
 
@@ -95,6 +99,9 @@ class Changes(object):
         if new_path in proj.osf.containers:
             # this has already handled (e.g. during prev file upload)
             return 1
+        elif new_path is not None:
+            asset = copy.copy(asset)
+            asset['path'] = new_path
         if asset['kind'] == 'folder':
             proj.osf.add_container(asset['path'], kind='folder')
         else:
@@ -113,7 +120,7 @@ class Changes(object):
         shutil.move(full_path_old, full_path_new)
         asset['path'] = new_path
         logging.info("Moved file locally: {} -> {}"
-                     .format(asset['path'], new_path))
+                     .format(asset['full_path'], new_path))
         return 1
 
     def apply_mv_remote(self, proj, asset, new_path):
