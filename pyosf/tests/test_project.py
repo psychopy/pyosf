@@ -15,7 +15,6 @@ import os
 from os.path import join
 import gc
 import shutil
-import hashlib
 import copy
 
 
