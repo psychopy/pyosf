@@ -202,6 +202,9 @@ class TestProjectChanges():
             mode = 'ab'
         if remote_change:
             # modify it
+            osf_asset = tools.find_by_key(proj.osf.index,
+                                          key='path', val=asset['path'])
+            asset['links'] = osf_asset['links']
             with open(path, mode) as f:
                 f.write("A bit of text added remotely. ")
             proj.osf.add_file(asset, update=True)
@@ -219,5 +222,5 @@ if __name__ == "__main__":
         console = logging.getLogger()
     console.setLevel(logging.INFO)
     import pytest
-    pytest.main(args=[__file__+"::TestProjectChanges::test_local_updated", '-s'])
-#    pytest.main(args=[__file__, '-s'])
+    # pytest.main(args=[__file__+"::TestProjectChanges::test_local_updated", '-s'])
+    pytest.main(args=[__file__, '-s'])

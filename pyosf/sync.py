@@ -234,7 +234,7 @@ class Changes(object):
                     # But if they differed wouldn't that mean a clock err?
                     # fetch the links from the remote so we can do an update op
                     local_asset['links'] = remote_asset['links']
-                    self.update_remote['path'] = copy.copy(local_asset)
+                    self.update_remote['path'] = local_asset
 
                 # don't re-analyze
                 del local_p[path]
