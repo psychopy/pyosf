@@ -12,7 +12,7 @@ Released under MIT license
 def find_by_key(in_list, key, val):
     """Returns the first item with key matching val
     """
-    return (item for item in in_list if item[key] == val).next()
+    return next(item for item in in_list if item[key] == val)
 
 
 def dict_from_list(in_list, key):
