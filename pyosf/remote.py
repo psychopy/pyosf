@@ -180,7 +180,8 @@ class Session(requests.Session):
         # then populate self.userID and self.userName
         resp = self.get(constants.API_BASE+"/users/me/")
         if resp.status_code != 200:
-            raise AuthError('Invalid credentials trying to fetch user data.')
+            raise AuthError('Invalid credentials trying to fetch user data:\n{}'
+                            .format(resp.json()))
         else:
             logging.info("Successful authentication with token")
         json_resp = resp.json()
