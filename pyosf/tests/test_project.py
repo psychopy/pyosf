@@ -35,12 +35,14 @@ def print_all_changes(changes):
 class TestProjectChanges():
 
     def teardown_class(self):
-        # take a copy of the remote project files to revert to later
+        # take a copy of the remote project for reference
         if os.path.isdir('EndOfLastTest'):
             shutil.rmtree('EndOfLastTest')  # start with no project root
         shutil.copytree(self.proj_root, 'EndOfLastTest')
-        shutil.rmtree(self.proj_root)
-        shutil.copytree(self.safe_copy, self.proj_root)
+        #revert the local project to original state
+        if os.path.isdir(self.proj_root):
+            shutil.rmtree(self.proj_root)  # start with no project root
+        shutil.copytree(self.files_orig, self.proj_root)
         # perform a sync with remote to reset all the files there
         proj = project.Project(project_file=self.proj_file)
         do_sync(proj)
@@ -48,15 +50,17 @@ class TestProjectChanges():
     def setup_class(self):
         self.proj_id = 'qgt58'
         self.this_dir, filename = os.path.split(__file__)
+        self.files_orig = join(self.this_dir, "files_orig")
         self.tmp_folder = join(self.this_dir, "tmp")
         self.proj_file = join(self.this_dir, "tmp", "test.proj")
         self.proj_root = join(self.this_dir, "tmp", "files")
-        self.safe_copy = join(self.tmp_folder, "files_copy")
 
         if os.path.isfile(self.proj_file):
             os.remove(self.proj_file)  # start with no project file
         if os.path.isdir(self.proj_root):
             shutil.rmtree(self.proj_root)  # start with no project root
+        # start with what we know
+        shutil.copytree(self.files_orig, self.proj_root)
 
         # first time around we need to supply username/password
         session = remote.Session(username='jon@peirce.org.uk',
@@ -91,11 +95,6 @@ class TestProjectChanges():
               .format(t1-t0))
         print(changes)  # prints a prettified table
         print_all_changes(changes)
-
-        # take a copy of the remote project files to revert to later
-        if os.path.isdir(self.safe_copy):
-            shutil.rmtree(self.safe_copy)
-        shutil.copytree(self.proj_root, self.safe_copy)
 
     def test_save_load_proj(self):
 

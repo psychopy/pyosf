@@ -1,0 +1,1 @@
+This is a test project with some files (the visual folder of PsychoPy at version 1.83)
