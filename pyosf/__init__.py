@@ -1,4 +1,4 @@
-__version__ = '0.0.1'
+__version__ = '1.0.0'
 __license__ = 'MIT'
 __author__ = 'Jonathan Peirce'
 __author_email__ = 'jon@peirce.org.uk'
