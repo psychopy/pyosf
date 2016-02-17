@@ -141,7 +141,7 @@ class TestProjectChanges():
         self.proj.save()
 
     def test_add_and_remove_remote(self):
-        test_path = 'newFolder/testTextFile.txt'
+        test_path = 'newFolder/someTextFile.txt'
         # add a folder and file remotely to propogate to local
         # take an arbitrary file from local give a new path and push to remote
         asset = tools.find_by_key(self.proj.local.index, 'path', 'README.txt')

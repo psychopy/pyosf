@@ -154,13 +154,6 @@ class Session(requests.Session):
             projs.append(OSFProject(session=self, id=entry))
         return projs
 
-    def find_my_projects(self):
-        """Find project IDs matching a given search string, that the
-        current authenticaed user/session can access
-        """
-        # NB user_id was created during self.authenticate()
-        return self.find_user_projects(self.user_id)
-
     @property
     def token(self):
         """The authorisation token for the current logged in user
@@ -339,7 +332,10 @@ class Node(object):
     def title(self):
         """The title of this node/project
         """
-        return self.json['attributes']['title']
+        if "title" in self.json['attributes']:
+            return self.json['attributes']['title']
+        else:
+            return self.json['attributes']['name']
 
     @property
     def kind(self):
@@ -363,12 +359,12 @@ class Node(object):
     def children(self):
         """(read only) A list of nodes, one for each child
         """
-        req = self.session.get("{}/nodes/{}/children"
-                               .format(constants.API_BASE, self.id))
-
         child_list = []
-        for node in req.json()['data']:
-            child_list.append(Node(session=self.session, id=node["id"]))
+        if "children" in self.json['relationships']:
+            req = self.session.get("{}/nodes/{}/children"
+                                   .format(constants.API_BASE, self.id))
+            for node in req.json()['data']:
+                child_list.append(Node(session=self.session, id=node["id"]))
         return child_list
 
     @property
@@ -390,9 +386,12 @@ class Node(object):
         else:
             return Node(session=self.session, id=parent_URL)
 
-    def _node_file_list(self, url):
+    def _node_file_list(self, url=None):
         """Returns all the files within a node (including sub-folders)
         """
+        if url is None:  # use the root of this Node id
+            url = "{}/nodes/{}/files/osfstorage".format(constants.API_BASE,
+                                                        self.id)
         reply = self.session.get(url).json()['data']
         file_list = []
         for entry in reply:
@@ -490,7 +489,10 @@ class FileNode(Node):
     def files(self):
         """A json representation of files at this level of the heirarchy
         """
-        return self.json['files']
+        if 'files' in self.json:
+            return self.json['files']  # exists for top-level nodes
+        else:
+            return []  # doesn't exist for FileNodes
 
     @property
     def info(self):

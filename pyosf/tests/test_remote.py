@@ -45,9 +45,22 @@ class TestSession(object):
         for proj in projs:
             print(" - {}".format(proj.title))
 
+    def test_session_token(self):
+        # this is a @property def so make sure the code runs
+        print(self.session.token)
+
+    def test_file_attributes(self):
+        proj = self.session.open_project('nqwss')
+        # includes several @property attributes that should be tested
+        this_id = proj._node_file_list()[0]['id']
+        node = remote.FileNode(self.session, this_id)
+        print("Testing attribs for {}:".format(node.name))
+        for attr_name in dir(node):
+            print(" - {} = {}".format(attr_name, getattr(node, attr_name)))
+
     def test_search_me(self):
         print("Finding projects for 'me' ({})".format(self.session.username))
-        userProjects = self.session.find_my_projects()
+        userProjects = self.session.find_user_projects()
         for proj in userProjects:
             if printing:
                 print(" - {}: {}".format(proj.id, proj.title))

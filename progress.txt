@@ -3,21 +3,19 @@
   [x] authentication with username/password or token
   [x] saving/loading local index (in project)
   [x] highlevel.project needs to handle first creation (no file at project_path)
-  [x] unit testing
+  [x] automaed unit testing and coverage (Travis-CI, CodeCov)
   [x] analyse files to sync
   [x] uploading files to the remote
-
-  [o] test cases:
+  [x] test cases:
     [x] 111 conflict
     [x] 111 update local
     [x] 111 update remote
     [x] 100  [remove from index. Don't need to test?]
     [x] 101 deleted local but changed remotely
-    [ ] 110 deleted remotely but changed locally
+    [x] 110 deleted remotely but changed locally
     [x] 011 added in remote and local
     [x] 010 added locally
     [x] 001 added remotely
-
 
   [ ]  exclude 'ignore' paths from indexing
   [ ]  what happens when not connected?
