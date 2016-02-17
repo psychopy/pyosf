@@ -39,7 +39,7 @@ class TestSession(object):
                     print(" - {}: {}".format(proj.id, proj.title))
 
     def test_search_projects(self):
-        projs = self.session.search_project_names('Is it just motion',
+        projs = self.session.find_projects('Is it just motion',
                                                   tags='PsychoPy')
         print("Found projects by name : ")
         for proj in projs:

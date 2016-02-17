@@ -237,5 +237,5 @@ if __name__ == "__main__":
         console = logging.getLogger()
     console.setLevel(logging.INFO)
     import pytest
-    # pytest.main(args=[__file__+"::TestProjectChanges::test_folder_in_folder", '-s'])
+    # pytest.main(args=[__file__+"::TestProjectChanges::some_test", '-s'])
     pytest.main(args=[__file__, '-s'])

@@ -38,6 +38,12 @@ class HTTPSError(Exception):
     pass
 
 
+class OSFError(Exception):
+    """Errors accessing OSF files (e.g. no such user)
+    """
+    pass
+
+
 class TokenStorage(dict):
     """Dict-based class to store all the known tokens according to username
     """
@@ -109,7 +115,7 @@ class Session(requests.Session):
 #        except:
 #            return None
 
-    def search_project_names(self, search_str, tags="psychopy"):
+    def find_projects(self, search_str, tags="psychopy"):
         """
         Parameters
         ----------
@@ -143,14 +149,18 @@ class Session(requests.Session):
         return users
 
     def find_user_projects(self, user_id=None):
-        """Finds all the projects of a given user_id (None for current user)
+        """Finds all readable projects of a given user_id
+        (None for current user)
         """
         if user_id is None:
             user_id = self.user_id
-        reply = self.get("{}/users/{}/nodes?filter[category]=project"
-                         .format(constants.API_BASE, user_id)).json()
+        full_url = "{}/users/{}/nodes?filter[category]=project" \
+                   .format(constants.API_BASE, user_id)
+        reply = self.get(full_url)
+        if reply.status_code not in [200, 201]:
+            raise OSFError("No user found. Sent:\n   {}".format(full_url))
         projs = []
-        for entry in reply['data']:
+        for entry in reply.json()['data']:
             projs.append(OSFProject(session=self, id=entry))
         return projs
 
@@ -703,7 +713,6 @@ class OSFProject(Node):
             raise HTTPSError("Failed remote file move URL:{}\nreply:{}"
                              .format(url_move,
                                      json.dumps(reply.json(), indent=2)))
-        # TODO:  # check if move worked
 
     def del_file(self, asset):
 
