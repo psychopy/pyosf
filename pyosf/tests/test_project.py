@@ -216,11 +216,9 @@ class TestProjectChanges():
             # (create a copy, modify, upload and delete copy)
             shutil.copy(path, 'tmp.txt')
 
-            osf_asset = tools.find_by_key(proj.osf.index,
-                                          key='path', val=asset['path'])
-            osf_asset = copy.copy(osf_asset)  # don't change the original
+            osf_asset = copy.copy(proj.osf.find_asset(asset['path']))
             osf_asset['full_path'] = 'tmp.txt'
-            with open(path, mode) as f:
+            with open('tmp.txt', mode) as f:
                 f.write("A bit of text added remotely. ")
             proj.osf.add_file(osf_asset, update=True)
             os.remove('tmp.txt')  # delete the copy used for secret edit

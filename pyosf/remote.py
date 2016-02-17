@@ -622,8 +622,9 @@ class OSFProject(Node):
                 logging.info("Basing it in {}".format(container))
                 url_create = container['links']['new_folder']
             else:
-                container = self.containers[container_path]
+                asset = self.containers[container_path]
                 logging.info("Using existing {}".format(container))
+                return asset
 
             url = "{}&name={}".format(url_create, name)
             reply = self.session.put(url)
