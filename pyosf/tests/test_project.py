@@ -18,9 +18,11 @@ import shutil
 import copy
 
 
-def do_sync(proj):
+def do_sync(proj, print_all=False):
     changes = proj.get_changes()
     print(changes)
+    if print_all:
+        print_all_changes(changes)
     changes.apply(proj)
     proj.save()
 
@@ -93,6 +95,7 @@ class TestProjectChanges():
         t1 = time.time()
         print("Indexing and finding diffs took {:.3f}s".format(t1-t0))
         print(changes)  # prints a prettified table
+        print_all_changes(changes)
         t2 = time.time()
         print("Applying changes")
         changes.apply(proj)
@@ -185,6 +188,13 @@ class TestProjectChanges():
         print("Sync with a remote update")
         do_sync(self.proj)
 
+    def test_folder_in_folder(self):
+        folder_path = "folderLevel1/folderLevel2"
+        self.proj.osf.add_container(folder_path, kind='folder')
+        print("Test sync with a folder in folder")
+        do_sync(self.proj)
+        assert os.path.isdir(join(self.proj_root, folder_path))
+
     def _make_changes(self, proj, filename,
                       local_change=True, remote_change=True):
         """Function to apply changes to local file, remote or both
@@ -200,14 +210,21 @@ class TestProjectChanges():
             mode = 'at'
         else:
             mode = 'ab'
+
         if remote_change:
-            # modify it
+            # modify it with no change to local date_modified
+            # (create a copy, modify, upload and delete copy)
+            shutil.copy(path, 'tmp.txt')
+
             osf_asset = tools.find_by_key(proj.osf.index,
                                           key='path', val=asset['path'])
-            asset['links'] = osf_asset['links']
+            osf_asset = copy.copy(osf_asset)  # don't change the original
+            osf_asset['full_path'] = 'tmp.txt'
             with open(path, mode) as f:
                 f.write("A bit of text added remotely. ")
-            proj.osf.add_file(asset, update=True)
+            proj.osf.add_file(osf_asset, update=True)
+            os.remove('tmp.txt')  # delete the copy used for secret edit
+
         if local_change:
             # change again locally
             with open(path, mode) as f:
@@ -222,5 +239,5 @@ if __name__ == "__main__":
         console = logging.getLogger()
     console.setLevel(logging.INFO)
     import pytest
-    # pytest.main(args=[__file__+"::TestProjectChanges::test_local_updated", '-s'])
+    # pytest.main(args=[__file__+"::TestProjectChanges::test_folder_in_folder", '-s'])
     pytest.main(args=[__file__, '-s'])

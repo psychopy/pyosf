@@ -10,7 +10,7 @@
   [o] test cases:
     [x] 111 conflict
     [x] 111 update local
-    [ ] 111 update remote
+    [x] 111 update remote
     [x] 100  [remove from index. Don't need to test?]
     [x] 101 deleted local but changed remotely
     [ ] 110 deleted remotely but changed locally
