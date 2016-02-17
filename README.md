@@ -28,14 +28,14 @@ When you first create a `Project`, or to perform searches for projects, you need
 The `Session` allows you to conduct searches::
 
 ```python
-userIDs = session.find_users(name)  # a list of user ids
-jon_id = userIDs[0]
-projs = session.find_user_projects(id=jon_id)  # id=None to find your own projects
+users = session.find_users("Peirce")  # a list of user ids
+print users
+jon_id = users[0]['id']  # we're just using the first one
+projs = session.find_user_projects(user_id=jon_id)  # id=None to find your own projects
 for proj in projs:
-    if printing:
-        print("{}: {}".format(proj.id, proj.title))
+    print("{}: {}".format(proj.id, proj.title))
 
-osf_proj = session.open_project(proj_id)
+osf_proj = session.open_project(proj_id)  # or this if you know the project id
 ```
 
 Then you can create a `Project` object to track the remote and local files. To do this you need:
