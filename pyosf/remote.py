@@ -12,10 +12,16 @@ Created on Sun Feb  7 21:31:15 2016
 """
 
 from __future__ import absolute_import, print_function
+
 import os
+import sys
+import io
+import weakref
 import requests
+import threading
 import json
 import datetime
+import time
 import hashlib
 try:
     from psychopy import logging
@@ -25,6 +31,11 @@ except ImportError:
     console = logging.getLogger()
 from . import constants
 from .tools import dict_from_list, find_by_key
+
+#for the status of the PushPullThread
+NOT_STARTED = 0
+STARTED = 1
+FINISHED = -1
 
 
 class AuthError(Exception):
@@ -40,6 +51,12 @@ class HTTPSError(Exception):
 
 class OSFError(Exception):
     """Errors accessing OSF files (e.g. no such user)
+    """
+    pass
+
+
+class CancelledError(Exception):
+    """Detect when a file upload is cancelled
     """
     pass
 
@@ -80,6 +97,110 @@ class TokenStorage(dict):
                 f.write(json_str)
 
 
+class BufferReader(object):
+    """requests doesn't have a method for uploading files in chunks so this
+    class provides that by simulating a file.read method but using chunks
+    (and tracking how much has been sent)
+    """
+    def __init__(self, filepath, chunk_size, callback=None):
+        self._callback = callback
+        self._progress = 0
+        self.chunk_size = chunk_size
+        self._len = os.path.getsize(filepath)
+        self._f = open(filepath, 'rb')
+
+    def __len__(self):
+        return self._len
+
+    def read(self, chunk_size):
+        chunk = self._f.read(chunk_size)
+        self._progress += int(len(chunk))  # len of actual chunk, not requested
+        if self._callback:
+            try:
+                self._callback(self._progress)
+            except:  # catches exception from the callback
+                raise CancelledError('The upload was cancelled.')
+        return chunk
+
+
+class PushPullThread(threading.Thread):
+    def __init__(self, session, kind='push',
+                 chunk_size=65536):  # 65Kb
+        threading.Thread.__init__(self)
+        self.asset_list = []
+        self.status = NOT_STARTED
+        self.session = weakref.ref(session)
+        self.chunk_size = chunk_size
+        self.queue_size = 0
+        self._finished_files_size = 0
+        self.this_file_prog = 0
+        self.kind = kind
+
+    @property
+    def finished_size(self):
+        return self._finished_files_size + self.this_file_prog
+
+    def add_asset(self, url, local_path, size):
+        self.asset_list.append(
+            {'url': url,
+             'local_path': local_path,
+             'size': size})
+        self.queue_size += size
+
+    def run(self):
+        if self.is_alive():
+            self.status = STARTED
+        else:
+            self.status = FINISHED
+        session = self.session()  # session is a self.weakref
+        if self.kind == 'push':
+            for asset in self.asset_list:
+                self.upload_file(asset, session)
+                logging.info("Uploading {} to OSF")
+        else:
+            for asset in self.asset_list:
+                self.download_file(asset, session)
+                logging.info("Downloading {} from OSF")
+
+    def update_progress(self, this_file_prog):
+        """The file chunker needs this method for a callback"""
+        self.this_file_prog = this_file_prog
+
+    def upload_file(self, asset, session):
+        self.currFileProgress = 0
+        # do the upload
+        file_buffer = BufferReader(asset['local_path'],
+                                   self.chunk_size, self.info_callback)
+        reply = session.put(asset['url'], data=file_buffer, timeout=5.0)
+        # check the upload worked (md5 checksum)
+        with open(asset['local_path'], 'rb') as f:
+            local_md5 = hashlib.md5(f.read()).hexdigest()
+        if reply.status_code not in [200, 201]:
+            raise HTTPSError("URL:{}\nreply:{}"
+                             .format(asset['url'],
+                                     json.dumps(reply.json(), indent=2)))
+        # reply includes info about the FileNode created so process that
+        uploadedAttrs = reply.json()['data']['attributes']
+        if local_md5 != uploadedAttrs['extra']['hashes']['md5']:
+            raise Exception("Uploaded file did not match existing SHA. "
+                            "Maybe it didn't fully upload?")
+
+    def download_file(self, asset, session):
+        self.this_file_prog = 0
+        reply = session.get(asset['url'], stream=True, timeout=5.0)
+        if reply.status_code == 200:
+            with open(asset['local_path'], 'wb') as f:
+                for chunk in reply.iter_content(self.chunk_size):
+                    f.write(chunk)
+                    self.this_file_prog += self.chunk_size
+                    time.sleep(0.0001)
+        self.this_file_prog = 0
+        self._finished_files_size += asset['size']
+
+    def info_callback(self, progress):
+        self.this_file_prog = progress
+
+
 class Session(requests.Session):
     """A class to track a session with the OSF server.
 
@@ -95,6 +216,7 @@ class Session(requests.Session):
         anonymous user
         """
         requests.Session.__init__(self)
+
         self.username = username
         self.password = password
         self.user_id = None  # populate when token property is set
@@ -107,13 +229,14 @@ class Session(requests.Session):
         elif username is not None:
             self.authenticate(username, password, otp)
         self.headers.update({'content-type': 'application/json'})
+        # placeholders for up/downloader threads
+        self.downloader = None
+        self.uploader = None
 
     def open_project(self, proj_id):
         """Returns a OSF_Project object or None (if that id couldn't be opened)
         """
         return OSFProject(session=self, id=proj_id)
-#        except:
-#            return None
 
     def find_projects(self, search_str, tags="psychopy"):
         """
@@ -122,25 +245,46 @@ class Session(requests.Session):
         search_str : str
             The string to search for in the title of the project
         tags : str
-            Comma-separated string containing tags (currently case-sensitive)
+            Comma-separated string containing tags
 
         Returns
         -------
         A list of OSFProject objects
 
         """
-        reply = self.get("{}/nodes/?filter[tags][icontains]={}"
-                         .format(constants.API_BASE, tags)).json()
+        url = "{}/nodes/".format(constants.API_BASE)
+        intro = "?"
+        if tags:
+            tagsList = tags.split(",")
+            for tag in tagsList:
+                tag = tag.strip()  # remove surrounding whitespace
+                if tag == '':
+                    continue
+                url += "{}filter[tags][icontains]={}".format(intro, tag)
+                intro = "&"
+        if search_str:
+            url += "{}filter[title][icontains]={}".format(intro, search_str)
+            intro = "&"
+        print("searching: {}".format(url))
+        t0 = time.time()
+
+        reply = self.get(url, timeout=5.0)
+        print("Download took: {}s".format(time.time()-t0))
+        t1 = time.time()
+        reply = reply.json()
+        print("JSON format took: {}s".format(time.time()-t1))
+        t2 = time.time()
         projs = []
         for entry in reply['data']:
             projs.append(OSFProject(session=self, id=entry))
+        print("Projects took took: {}s".format(time.time()-t2))
         return projs
 
     def find_users(self, search_str):
         """Find user IDs whose name matches a given search string
         """
         reply = self.get("{}/users/?filter[full_name]={}"
-                         .format(constants.API_BASE, search_str)).json()
+                         .format(constants.API_BASE, search_str), timeout=5.0).json()
         users = []
         for thisUser in reply['data']:
             attrs = thisUser['attributes']
@@ -156,7 +300,7 @@ class Session(requests.Session):
             user_id = self.user_id
         full_url = "{}/users/{}/nodes?filter[category]=project" \
                    .format(constants.API_BASE, user_id)
-        reply = self.get(full_url)
+        reply = self.get(full_url, timeout=5.0)
         if reply.status_code not in [200, 201]:
             raise OSFError("No user found. Sent:\n   {}".format(full_url))
         projs = []
@@ -183,7 +327,7 @@ class Session(requests.Session):
             }
         self.headers.update(headers)
         # then populate self.userID and self.userName
-        resp = self.get(constants.API_BASE+"/users/me/")
+        resp = self.get(constants.API_BASE+"/users/me/", timeout=5.0)
         if resp.status_code != 200:
             raise AuthError('Invalid credentials trying to get user data:\n{}'
                             .format(resp.json()))
@@ -241,14 +385,14 @@ class Session(requests.Session):
             token_url,
             headers=headers,
             data=json.dumps(token_request_body),
-            auth=(username, password)
+            auth=(username, password), timeout=5.0,
             )
         if resp.status_code in (401, 403):
             # If login failed because of a missing two-factor authentication
             # code, notify the user to try again
             # This header appears for basic auth requests, and only when a
             # valid password is provided
-            otp_val = resp.headers.get('X-OSF-OTP', '')
+            otp_val = resp.headers.get('X-OSF-OTP', '', timeout=5.0)
             if otp_val.startswith('required'):
                 raise AuthError('Must provide code for two-factor'
                                 'authentication')
@@ -263,19 +407,90 @@ class Session(requests.Session):
             self.token = json_resp['data']['attributes']['token_id']
             return 1
 
-    def download_file(self, file_id, local_path):
-        """ Download a file with given objetc id
+    def download_file(self, url, local_path,
+                      size=0, threaded=False):
+        """ Download a file with given object id
 
         Parameters
         ----------
 
-        file_id : str
-            The OSF id for the file
+        asset : str or dict
+            The OSF id for the file or dict of info
         local_path : str
             The full path where the file will be downloaded
 
         """
-        FileNode(self, file_id).download(local_path)
+        if threaded:
+            if self.downloader is None or \
+                    self.downloader.status != NOT_STARTED:  # can't re-use
+                self.downloader = PushPullThread(session=self, kind='pull')
+            self.downloader.add_asset(url, local_path, size)
+
+    def upload_file(self, url, update=False, local_path=None,
+                    size=0, threaded=False):
+        """Adds the file to the OSF project.
+        If containing folder doesn't exist then it will be created recursively
+
+        update is used if the file already exists but needs updating (version
+        will be incremented).
+        """
+        if threaded:
+            if self.uploader is None or \
+                    self.uploader.status != NOT_STARTED:  # can't re-use
+                self.uploader = PushPullThread(session=self, kind='push')
+            self.uploader.add_asset(url, local_path, size)
+        else:
+            with open(local_path, 'rb') as f:
+                reply = self.session.put(url, data=f, timeout=5.0)
+            with open(local_path, 'rb') as f:
+                local_md5 = hashlib.md5(f.read()).hexdigest()
+            if reply.status_code not in [200, 201]:
+                raise HTTPSError("URL:{}\nreply:{}"
+                                 .format(url,
+                                         json.dumps(reply.json(), indent=2)))
+            node = FileNode(self.session, reply.json()['data'])
+
+            if local_md5 != node.json['attributes']['extra']['hashes']['md5']:
+                raise Exception("Uploaded file did not match existing SHA. "
+                                "Maybe it didn't fully upload?")
+            return node
+
+    def apply_changes(self):
+        """If threaded up/downloading is enabled then this begins the process
+        """
+        if self.uploader:
+            self.uploader.start()
+        if self.downloader:
+            self.downloader.start()
+
+    def get_progress(self):
+        """Returns either:
+                    {'up': [done, total],
+                     'down': [done, total]}
+                or:
+                    1 for finished
+        """
+        done = True  # but we'll check for alive threads and set False
+        if self.uploader is None:
+            up = [0, 0]
+        else:
+            if self.uploader.isAlive():
+                done = False
+            up = [self.uploader.finished_size,
+                  self.uploader.queue_size]
+
+        if self.downloader is None:
+            down = [0, 0]
+        else:
+            if self.downloader.isAlive():
+                done = False
+            down = [self.downloader.finished_size,
+                    self.downloader.queue_size]
+
+        if not done:  # at least one thread reported being alive
+            return {'up': up, 'down': down}
+        else:
+            return 1
 
 
 class Node(object):
@@ -307,7 +522,7 @@ class Node(object):
             id = self.json['id']
         elif id.startswith('http'):
             # treat as URL. Extract the id from the request data
-            reply = self.session.get(id)
+            reply = self.session.get(id, timeout=5.0)
             if reply.status_code == 200:
                 self.json = reply.json()['data']
                 id = self.json['id']
@@ -317,7 +532,8 @@ class Node(object):
         else:
             # treat as OSF id and fetch the URL
             reply = self.session.get("{}/nodes/{}/"
-                                     .format(constants.API_BASE, id))
+                                     .format(constants.API_BASE, id),
+                                     timeout=5.0)
             if reply.status_code == 200:
                 self.json = reply.json()['data']
             else:
@@ -325,7 +541,8 @@ class Node(object):
                                  .format(reply))
         # also get info about files if possible
         files_reply = self.session.get("{}/nodes/{}/files"
-                                       .format(constants.API_BASE, id))
+                                       .format(constants.API_BASE, id),
+                                       timeout=5.0)
         if files_reply.status_code == 200:
             for provider in files_reply.json()['data']:
                 if provider['attributes']['name'] == 'osfstorage':
@@ -372,7 +589,8 @@ class Node(object):
         child_list = []
         if "children" in self.json['relationships']:
             req = self.session.get("{}/nodes/{}/children"
-                                   .format(constants.API_BASE, self.id))
+                                   .format(constants.API_BASE, self.id),
+                                   timeout=5.0)
             for node in req.json()['data']:
                 child_list.append(Node(session=self.session, id=node["id"]))
         return child_list
@@ -402,7 +620,7 @@ class Node(object):
         if url is None:  # use the root of this Node id
             url = "{}/nodes/{}/files/osfstorage".format(constants.API_BASE,
                                                         self.id)
-        reply = self.session.get(url).json()['data']
+        reply = self.session.get(url, timeout=5.0).json()['data']
         file_list = []
         for entry in reply:
             f = FileNode(self.session, entry)
@@ -507,7 +725,7 @@ class FileNode(Node):
     @property
     def info(self):
         infoLink = self.links['info']
-        reply = self.session.get(infoLink)
+        reply = self.session.get(infoLink, timeout=5.0)
         return reply.json()['data']
 
     @property
@@ -540,7 +758,7 @@ class FileNode(Node):
         else:
             return None
 
-    def download(self, target_path):
+    def download(self, target_path, threaded=False):
         """Download this file to the target folder
 
         Parameters
@@ -553,12 +771,9 @@ class FileNode(Node):
             raise TypeError("pyosf: Attempted to download object of kind={!r}"
                             "but download is only possible for files"
                             .format(self.kind))
-        URL = self.links['download']
-        r = self.session.get(URL, stream=True)
-        if r.status_code == 200:
-            with open(target_path, 'wb') as f:
-                for chunk in r.iter_content(1024):
-                    f.write(chunk)
+        url = self.links['download']
+        self.session.download_file(url=url, local_path=target_path,
+                                   threaded=threaded)
 
 
 class OSFProject(Node):
@@ -577,6 +792,8 @@ class OSFProject(Node):
         self.path = ""  # provided for consistency with FileNode
         self.name = ""  # provided for consistency with FileNode
         self._index = None
+        self.uploader = None  # to cache asynchronous uploads
+        self.downloader = None  # to cache asynchronous downloads
 
     def __repr__(self):
         return "OSF_Project(%r)" % (self.id)
@@ -639,7 +856,7 @@ class OSFProject(Node):
                 return asset
 
             url = "{}&name={}".format(url_create, name)
-            reply = self.session.put(url)
+            reply = self.session.put(url, timeout=5.0)
             if reply.status_code == 409:
                 # conflict code indicating the folder does exist
                 print("err 409:", path, self.containers)
@@ -660,13 +877,13 @@ class OSFProject(Node):
         """
         return find_by_key(self.index, 'path', path)
 
-    def add_file(self, asset, update=False, new_path=None):
+    def add_file(self, asset, update=False, new_path=None, threaded=False):
         """Adds the file to the OSF project.
         If containing folder doesn't exist then it will be created recursively
-
         update is used if the file already exists but needs updating (version
         will be incremented).
         """
+        # get the url and local path
         local_path = asset['full_path']
         if new_path is None:
             new_path = asset['path']
@@ -683,20 +900,12 @@ class OSFProject(Node):
             # do the upload
             logging.info("Uploading file {} to container:{}"
                          .format(name, folder_asset['path']))
-        with open(local_path, 'rb') as f:
-            reply = self.session.put(url_upload, data=f)
-        with open(local_path, 'rb') as f:
-            local_md5 = hashlib.md5(f.read()).hexdigest()
-        if reply.status_code not in [200, 201]:
-            raise HTTPSError("URL:{}\nreply:{}"
-                             .format(url_upload,
-                                     json.dumps(reply.json(), indent=2)))
-        node = FileNode(self.session, reply.json()['data'])
-
-        if local_md5 != node.json['attributes']['extra']['hashes']['md5']:
-            raise Exception("Uploaded file did not match existing SHA. "
-                            "Maybe it didn't fully upload?")
-        return node
+        if 'size' in asset:
+            size = asset['size']
+        else:
+            size = 0
+        self.session.upload_file(url=url_upload, local_path=local_path,
+                                 size=size, threaded=threaded)
 
     def rename_file(self, asset, new_path):
         # ensure the target location exists
@@ -708,14 +917,13 @@ class OSFProject(Node):
         body = """{"action":   "rename",
                 "rename":   "%s"}
                """ % (new_name)
-        reply = self.session.post(url_move, data=body)
+        reply = self.session.post(url_move, data=body, timeout=5.0)
         if reply.status_code not in [200, 201]:
             raise HTTPSError("Failed remote file move URL:{}\nreply:{}"
                              .format(url_move,
                                      json.dumps(reply.json(), indent=2)))
 
     def del_file(self, asset):
-
         url_del = asset['links']['delete']
         reply = self.session.delete(url_del)
         if reply.status_code != 204:

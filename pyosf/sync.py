@@ -74,7 +74,7 @@ class Changes(object):
         for attrib_name in self._change_types:
             setattr(self, attrib_name, {})
 
-    def apply_add_local(self, proj, asset, new_path=None):
+    def apply_add_local(self, proj, asset, new_path=None, threaded=False):
         full_path = os.path.join(proj.local.root_path, new_path)
 
         # handle folders
@@ -89,13 +89,11 @@ class Changes(object):
         container, filename = os.path.split(full_path)
         if not os.path.isdir(container):
             os.makedirs(container)
-        proj.osf.session.download_file(asset['id'], full_path)
-        logging.info("Added file to local: {}".format(full_path))
-        if hasattr(logging, 'flush'):
-            logging.flush()
+        proj.osf.session.download_file(asset['url'], full_path,
+                                       size=asset['size'], threaded=threaded)
         return 1
 
-    def apply_add_remote(self, proj, asset, new_path=None):
+    def apply_add_remote(self, proj, asset, new_path=None, threaded=False):
         if new_path in proj.osf.containers:
             # this has already handled (e.g. during prev file upload)
             return 1
@@ -105,11 +103,10 @@ class Changes(object):
         if asset['kind'] == 'folder':
             proj.osf.add_container(asset['path'], kind='folder')
         else:
-            proj.osf.add_file(asset)
-        logging.info("Added {} to remote: {}".format(asset['kind'], new_path))
+            proj.osf.add_file(asset, threaded=threaded)
         return 1
 
-    def apply_mv_local(self, proj, asset, new_path):
+    def apply_mv_local(self, proj, asset, new_path, threaded=False):
         full_path_new = os.path.join(proj.local.root_path, new_path)
         full_path_old = os.path.join(proj.local.root_path, asset['path'])
         shutil.move(full_path_old, full_path_new)
@@ -118,14 +115,14 @@ class Changes(object):
                      .format(asset['full_path'], new_path))
         return 1
 
-    def apply_mv_remote(self, proj, asset, new_path):
+    def apply_mv_remote(self, proj, asset, new_path, threaded=False):
         new_folder, new_name = os.path.split(new_path)
         proj.osf.rename_file(asset, new_path)
         logging.info("Sync: Moved file remote: {} -> {}"
                      .format(asset['path'], new_path))
         return 1
 
-    def apply_del_local(self, proj, asset, new_path=None):
+    def apply_del_local(self, proj, asset, new_path=None, threaded=False):
         full_path = os.path.join(proj.local.root_path, new_path)
         if os.path.isfile(full_path):  # might have been removed already?
             os.remove(full_path)
@@ -134,27 +131,28 @@ class Changes(object):
         logging.info("Removed file locally: {}".format(asset['path']))
         return 1
 
-    def apply_del_remote(self, proj, asset, new_path=None):
+    def apply_del_remote(self, proj, asset, new_path=None, threaded=False):
         proj.osf.del_file(asset)
         logging.info("Sync: Del file remote: {}"
                      .format(asset['path']))
         return 1
 
-    def apply_update_local(self, proj, asset, new_path=None):
+    def apply_update_local(self, proj, asset, new_path=None, threaded=False):
         full_path = os.path.join(proj.local.root_path, asset['path'])
         # remove previous copy of file
         if os.path.isfile(full_path):  # might have been removed already?
             os.remove(full_path)
         # then fetch new one from remote
-        proj.osf.session.download_file(asset['id'], full_path)
+        proj.osf.session.download_file(asset['url'], full_path,
+                                       size=asset['size'], threaded=threaded)
         return 1
 
-    def apply_update_remote(self, proj, asset, new_path=None):
-        proj.osf.add_file(asset, update=True)
+    def apply_update_remote(self, proj, asset, new_path=None, threaded=False):
+        proj.osf.add_file(asset, update=True, threaded=threaded)
         logging.info("Sync: Update file remote: {}".format(asset['path']))
         return 1
 
-    def apply(self, proj):
+    def apply(self, proj, threaded=False):
         """Apply the changes using the given remote.Session object
         """
         # would it be wise to perform del operations before others?
@@ -171,7 +169,16 @@ class Changes(object):
             func_apply = getattr(self, "apply_{}".format(action_type))
             for new_path in path_list:
                 asset = action_dict[new_path]
-                func_apply(proj, asset, new_path)
+                func_apply(proj, asset, new_path, threaded=threaded)
+        proj.local._needs_rebuild_index = True
+        if threaded:
+            proj.osf.session.apply_changes()  # starts the queued up/downloads
+        else:
+            self.finish_sync(proj)
+
+    def finish_sync(self, proj):
+        """Needs to be done when the sync has finished
+        """
         # when local/remote updates are complete refresh index based on local
         proj.local.rebuild_index()
         proj.index = proj.local.index

@@ -19,3 +19,4 @@
 
   [ ]  exclude 'ignore' paths from indexing
   [ ]  what happens when not connected?
+  [ ]  what happens if people try to sync half-way through sync?

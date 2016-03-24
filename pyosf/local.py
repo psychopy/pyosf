@@ -28,9 +28,11 @@ class LocalFiles(object):
         # this should trigger the work to be done
         self.root_path = root_path
         self._index = None
+        self._needs_rebuild_index = False
 
     def rebuild_index(self):
         self._index = self._create_index()
+        self._needs_rebuild_index = False
 
     def _create_index(self, path=None):
         """Scans the tree of nodes recursively and returns
@@ -64,7 +66,7 @@ class LocalFiles(object):
 
     @property
     def index(self):
-        if self._index is None:
+        if self._index is None or self._needs_rebuild_index:
             self.rebuild_index()
         return self._index
 
