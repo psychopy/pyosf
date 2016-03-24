@@ -284,7 +284,8 @@ class Session(requests.Session):
         """Find user IDs whose name matches a given search string
         """
         reply = self.get("{}/users/?filter[full_name]={}"
-                         .format(constants.API_BASE, search_str), timeout=5.0).json()
+                         .format(constants.API_BASE, search_str),
+                         timeout=5.0).json()
         users = []
         for thisUser in reply['data']:
             attrs = thisUser['attributes']
@@ -441,14 +442,14 @@ class Session(requests.Session):
             self.uploader.add_asset(url, local_path, size)
         else:
             with open(local_path, 'rb') as f:
-                reply = self.session.put(url, data=f, timeout=5.0)
+                reply = self.put(url, data=f, timeout=5.0)
             with open(local_path, 'rb') as f:
                 local_md5 = hashlib.md5(f.read()).hexdigest()
             if reply.status_code not in [200, 201]:
                 raise HTTPSError("URL:{}\nreply:{}"
                                  .format(url,
                                          json.dumps(reply.json(), indent=2)))
-            node = FileNode(self.session, reply.json()['data'])
+            node = FileNode(self, reply.json()['data'])
 
             if local_md5 != node.json['attributes']['extra']['hashes']['md5']:
                 raise Exception("Uploaded file did not match existing SHA. "
@@ -852,7 +853,7 @@ class OSFProject(Node):
                 url_create = container['links']['new_folder']
             else:
                 asset = self.containers[container_path]
-                logging.info("Using existing {}".format(container))
+                logging.info("Using existing {}".format(container_path))
                 return asset
 
             url = "{}&name={}".format(url_create, name)
