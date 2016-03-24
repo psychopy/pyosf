@@ -23,7 +23,12 @@ def do_sync(proj, print_all=False):
     print(changes)
     if print_all:
         print_all_changes(changes)
-    changes.apply(proj)
+    changes.apply(threaded=True)
+    # threaded so wait until threads have finished
+    while changes.progress != -1:
+        time.sleep(0.1)
+    # when status says finished we do need to do a round-up
+    changes.finish_sync()
     proj.save()
 
 
@@ -98,7 +103,7 @@ class TestProjectChanges():
         print_all_changes(changes)
         t2 = time.time()
         print("Applying changes")
-        changes.apply(proj)
+        changes.apply(threaded=False)  # do_sync test will be threaded
         t3 = time.time()
         print("Applying changes took {:.3f}s".format(t3-t2))
         proj.save()

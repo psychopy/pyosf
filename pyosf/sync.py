@@ -16,6 +16,7 @@ from .constants import SHA
 import copy
 import os
 import shutil
+import weakref
 try:
     from psychopy import logging
 except ImportError:
@@ -44,7 +45,11 @@ search for e.g. code:010 to find the relevant python resolution
 class Changes(object):
     """This is essentially a dictionary of lists
     """
-    def __init__(self, local_index, remote_index, last_index):
+    def __init__(self, proj):
+        self.proj = weakref.ref(proj)
+        # make sure indices are up to date
+        proj.local.rebuild_index()
+        proj.osf.rebuild_index()
         # create the names of the self attributes
         # the actual attributes will be created during _set_empty
         self._change_types = []
@@ -53,10 +58,11 @@ class Changes(object):
             for target in ['local', 'remote']:
                 self._change_types.append("{}_{}".format(action, target))
         self._set_empty()
-        self.local_index = local_index
-        self.remote_index = remote_index
-        self.last_index = last_index
+        self.local_index = proj.local.index
+        self.remote_index = proj.osf.index
+        self.last_index = proj.index
         self.analyze()
+        self._status = 0
 
     def __str__(self):
         s = "\t Add\t Del\t Mv\t Update\n"
@@ -74,7 +80,8 @@ class Changes(object):
         for attrib_name in self._change_types:
             setattr(self, attrib_name, {})
 
-    def apply_add_local(self, proj, asset, new_path=None, threaded=False):
+    def apply_add_local(self, asset, new_path=None, threaded=False):
+        proj = self.proj()
         full_path = os.path.join(proj.local.root_path, new_path)
 
         # handle folders
@@ -93,7 +100,8 @@ class Changes(object):
                                        size=asset['size'], threaded=threaded)
         return 1
 
-    def apply_add_remote(self, proj, asset, new_path=None, threaded=False):
+    def apply_add_remote(self, asset, new_path=None, threaded=False):
+        proj = self.proj()
         if new_path in proj.osf.containers:
             # this has already handled (e.g. during prev file upload)
             return 1
@@ -106,7 +114,8 @@ class Changes(object):
             proj.osf.add_file(asset, threaded=threaded)
         return 1
 
-    def apply_mv_local(self, proj, asset, new_path, threaded=False):
+    def apply_mv_local(self, asset, new_path, threaded=False):
+        proj = self.proj()
         full_path_new = os.path.join(proj.local.root_path, new_path)
         full_path_old = os.path.join(proj.local.root_path, asset['path'])
         shutil.move(full_path_old, full_path_new)
@@ -115,14 +124,16 @@ class Changes(object):
                      .format(asset['full_path'], new_path))
         return 1
 
-    def apply_mv_remote(self, proj, asset, new_path, threaded=False):
+    def apply_mv_remote(self, asset, new_path, threaded=False):
+        proj = self.proj()
         new_folder, new_name = os.path.split(new_path)
         proj.osf.rename_file(asset, new_path)
         logging.info("Sync: Moved file remote: {} -> {}"
                      .format(asset['path'], new_path))
         return 1
 
-    def apply_del_local(self, proj, asset, new_path=None, threaded=False):
+    def apply_del_local(self, asset, new_path=None, threaded=False):
+        proj = self.proj()
         full_path = os.path.join(proj.local.root_path, new_path)
         if os.path.isfile(full_path):  # might have been removed already?
             os.remove(full_path)
@@ -131,13 +142,15 @@ class Changes(object):
         logging.info("Removed file locally: {}".format(asset['path']))
         return 1
 
-    def apply_del_remote(self, proj, asset, new_path=None, threaded=False):
+    def apply_del_remote(self, asset, new_path=None, threaded=False):
+        proj = self.proj()
         proj.osf.del_file(asset)
         logging.info("Sync: Del file remote: {}"
                      .format(asset['path']))
         return 1
 
-    def apply_update_local(self, proj, asset, new_path=None, threaded=False):
+    def apply_update_local(self, asset, new_path=None, threaded=False):
+        proj = self.proj()
         full_path = os.path.join(proj.local.root_path, asset['path'])
         # remove previous copy of file
         if os.path.isfile(full_path):  # might have been removed already?
@@ -147,14 +160,17 @@ class Changes(object):
                                        size=asset['size'], threaded=threaded)
         return 1
 
-    def apply_update_remote(self, proj, asset, new_path=None, threaded=False):
+    def apply_update_remote(self, asset, new_path=None, threaded=False):
+        proj = self.proj()
         proj.osf.add_file(asset, update=True, threaded=threaded)
         logging.info("Sync: Update file remote: {}".format(asset['path']))
         return 1
 
-    def apply(self, proj, threaded=False):
+    def apply(self, threaded=False):
+        proj = self.proj()
         """Apply the changes using the given remote.Session object
         """
+        self._status = 1
         # would it be wise to perform del operations before others?
         for action_type in self._change_types:
             action_dict = getattr(self, action_type)
@@ -169,16 +185,34 @@ class Changes(object):
             func_apply = getattr(self, "apply_{}".format(action_type))
             for new_path in path_list:
                 asset = action_dict[new_path]
-                func_apply(proj, asset, new_path, threaded=threaded)
+                func_apply(asset, new_path, threaded=threaded)
         proj.local._needs_rebuild_index = True
         if threaded:
             proj.osf.session.apply_changes()  # starts the queued up/downloads
         else:
-            self.finish_sync(proj)
+            self.finish_sync()
 
-    def finish_sync(self, proj):
-        """Needs to be done when the sync has finished
+    @property
+    def progress(self):
+        """Returns the progress of changes:
+            0 for not started sync (need apply())
+            dict during sync {'up':[done, total], 'down':[done, total]}
+            1 for finished
         """
+        if self._status in [0, -1]:  # not started or had already finished
+            return self._status
+        # otherwise we're partway through sync so check with session
+        prog = self.proj().osf.session.get_progress()
+        if prog == 1:
+            self._status = -1  # was running but now finished
+        else:
+            self._status = 1  # running
+        return prog  # probably a dictionary
+
+    def finish_sync(self):
+        """Rebuilds index when the sync has finished
+        """
+        proj = self.proj()
         # when local/remote updates are complete refresh index based on local
         proj.local.rebuild_index()
         proj.index = proj.local.index
