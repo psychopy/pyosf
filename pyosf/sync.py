@@ -76,6 +76,9 @@ class Changes(object):
                 )
         return s
 
+    def __len__(self):
+        return len(self.dry_run())
+
     def _set_empty(self):
         for attrib_name in self._change_types:
             setattr(self, attrib_name, {})
@@ -166,11 +169,14 @@ class Changes(object):
         logging.info("Sync: Update file remote: {}".format(asset['path']))
         return 1
 
-    def apply(self, threaded=False):
-        proj = self.proj()
+    def apply(self, threaded=False, dry_run=False):
         """Apply the changes using the given remote.Session object
+        returns a list of strings about what happened (or will happen if
+        dry_run=True)
         """
+        proj = self.proj()
         self._status = 1
+        actions = []
         # would it be wise to perform del operations before others?
         for action_type in self._change_types:
             action_dict = getattr(self, action_type)
@@ -185,12 +191,23 @@ class Changes(object):
             func_apply = getattr(self, "apply_{}".format(action_type))
             for new_path in path_list:
                 asset = action_dict[new_path]
-                func_apply(asset, new_path, threaded=threaded)
-        proj.local._needs_rebuild_index = True
-        if threaded:
-            proj.osf.session.apply_changes()  # starts the queued up/downloads
-        else:
-            self.finish_sync()
+                if dry_run:
+                    actions.append("{}: {}".format(action_type, new_path))
+                else:
+                    func_apply(asset, new_path, threaded=threaded)
+        if not dry_run:
+            proj.local._needs_rebuild_index = True
+            if threaded:
+                proj.osf.session.apply_changes()  # starts the up/downloads
+            else:
+                self.finish_sync()
+        return actions
+
+    def dry_run(self):
+        """Doesn't do anything but returns a list of strings describing the
+        actions
+        """
+        return self.apply(dry_run=True)
 
     @property
     def progress(self):
