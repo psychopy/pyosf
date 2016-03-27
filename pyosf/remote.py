@@ -721,9 +721,12 @@ class FileNode(Node):
         """The path to this folder/file from the root
         """
         if 'materialized' in self.json['attributes'].keys():
-            return self.json['attributes']['materialized'][1:]  # ignore "/"
+            p = self.json['attributes']['materialized'][1:]  # ignore "/"
         else:
-            return self.json['attributes']['name']
+            p = self.json['attributes']['name']
+        if p.endswith("/"):
+            p = p[:-1]
+        return p
 
     @property
     def modified(self):
