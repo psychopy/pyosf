@@ -21,7 +21,7 @@ try:
     from psychopy import logging
 except:
     import logging
-from pyosf import remote, local, sync
+from . import remote, local, sync
 import json
 
 PY3 = sys.version_info > (3,)
@@ -129,6 +129,7 @@ class Project(object):
                 f.write(bytes(json_str, 'UTF-8'))
             else:
                 f.write(json_str)
+        logging.info("Saved proj file: {}".format(proj_path))
 
     def load(self, proj_path=None):
         """Load the project from a json-format file
@@ -153,7 +154,7 @@ class Project(object):
         if proj_path is None:
             proj_path = self.project_file
         if not os.path.isfile(os.path.abspath(proj_path)):
-            print('no file: {}'.format(os.path.abspath(proj_path)))
+            logging.warn('No proj file: {}'.format(os.path.abspath(proj_path)))
             return (None, None, None, None)
         else:
             with open(os.path.abspath(proj_path), 'r') as f:
@@ -162,6 +163,7 @@ class Project(object):
             index = d['index']
             project_id = d['project_id']
             root_path = d['root_path']
+            logging.info('Loaded proj: {}'.format(os.path.abspath(proj_path)))
         return index, username, project_id, root_path
 
     def get_changes(self):

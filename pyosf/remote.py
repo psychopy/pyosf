@@ -14,8 +14,6 @@ Created on Sun Feb  7 21:31:15 2016
 from __future__ import absolute_import, print_function
 
 import os
-import sys
-import io
 import weakref
 import requests
 import threading
@@ -25,14 +23,12 @@ import time
 import hashlib
 try:
     from psychopy import logging
-    console = logging.console
 except ImportError:
     import logging
-    console = logging.getLogger()
 from . import constants
 from .tools import dict_from_list, find_by_key
 
-#for the status of the PushPullThread
+# for the status of the PushPullThread
 NOT_STARTED = 0
 STARTED = 1
 FINISHED = -1
@@ -125,8 +121,10 @@ class BufferReader(object):
 
 class PushPullThread(threading.Thread):
     def __init__(self, session, kind='push',
-                 chunk_size=65536):  # 65Kb
+                 chunk_size=65536,
+                 finished_callback=None):  # 65Kb
         threading.Thread.__init__(self)
+        self.finished_callback = finished_callback
         self.asset_list = []
         self.status = NOT_STARTED
         self.session = weakref.ref(session)
@@ -148,19 +146,19 @@ class PushPullThread(threading.Thread):
         self.queue_size += size
 
     def run(self):
-        if self.is_alive():
-            self.status = STARTED
-        else:
-            self.status = FINISHED
+        self.status = STARTED  # probably can't be read so don't bother?
         session = self.session()  # session is a self.weakref
         if self.kind == 'push':
             for asset in self.asset_list:
                 self.upload_file(asset, session)
-                logging.info("Uploading {} to OSF")
         else:
             for asset in self.asset_list:
                 self.download_file(asset, session)
-                logging.info("Downloading {} from OSF")
+                logging.info("Downloading {} from {}"
+                             .format(asset['local_path'], asset['url']))
+        self.status = FINISHED
+        if self.finished_callback:
+            self.finished_callback()
 
     def update_progress(self, this_file_prog):
         """The file chunker needs this method for a callback"""
@@ -184,6 +182,8 @@ class PushPullThread(threading.Thread):
         if local_md5 != uploadedAttrs['extra']['hashes']['md5']:
             raise Exception("Uploaded file did not match existing SHA. "
                             "Maybe it didn't fully upload?")
+        logging.info("Async upload complete: {} to {}"
+                     .format(asset['local_path'], asset['url']))
 
     def download_file(self, asset, session):
         self.this_file_prog = 0
@@ -196,6 +196,8 @@ class PushPullThread(threading.Thread):
                     time.sleep(0.0001)
         self.this_file_prog = 0
         self._finished_files_size += asset['size']
+        logging.info("Async download complete: {} to {}"
+                     .format(asset['local_path'], asset['url']))
 
     def info_callback(self, progress):
         self.this_file_prog = progress
@@ -265,19 +267,19 @@ class Session(requests.Session):
         if search_str:
             url += "{}filter[title][icontains]={}".format(intro, search_str)
             intro = "&"
-        print("searching: {}".format(url))
+        logging.info("Searching OSF using: {}".format(url))
         t0 = time.time()
 
         reply = self.get(url, timeout=5.0)
-        print("Download took: {}s".format(time.time()-t0))
+        logging.info("Download results took: {}s".format(time.time()-t0))
         t1 = time.time()
         reply = reply.json()
-        print("JSON format took: {}s".format(time.time()-t1))
+        logging.info("Convert JSON format took: {}s".format(time.time()-t1))
         t2 = time.time()
         projs = []
         for entry in reply['data']:
             projs.append(OSFProject(session=self, id=entry))
-        print("Projects took took: {}s".format(time.time()-t2))
+        logging.info("Extracting projects took: {}s".format(time.time()-t2))
         return projs
 
     def find_users(self, search_str):
@@ -424,8 +426,16 @@ class Session(requests.Session):
         if threaded:
             if self.downloader is None or \
                     self.downloader.status != NOT_STARTED:  # can't re-use
-                self.downloader = PushPullThread(session=self, kind='pull')
+                self.downloader = PushPullThread(session=self, kind='pull',
+                                    finished_callback=self.finished_downloads)
             self.downloader.add_asset(url, local_path, size)
+        else:
+            # download immediately
+            reply = self.get(url, stream=True, timeout=5.0)
+            if reply.status_code == 200:
+                with open(local_path, 'wb') as f:
+                    for chunk in reply.iter_content(self.chunk_size):
+                        f.write(chunk)
 
     def upload_file(self, url, update=False, local_path=None,
                     size=0, threaded=False):
@@ -438,7 +448,8 @@ class Session(requests.Session):
         if threaded:
             if self.uploader is None or \
                     self.uploader.status != NOT_STARTED:  # can't re-use
-                self.uploader = PushPullThread(session=self, kind='push')
+                self.uploader = PushPullThread(session=self, kind='push',
+                                    finished_callback=self.finished_uploads)
             self.uploader.add_asset(url, local_path, size)
         else:
             with open(local_path, 'rb') as f:
@@ -450,11 +461,17 @@ class Session(requests.Session):
                                  .format(url,
                                          json.dumps(reply.json(), indent=2)))
             node = FileNode(self, reply.json()['data'])
-
             if local_md5 != node.json['attributes']['extra']['hashes']['md5']:
                 raise Exception("Uploaded file did not match existing SHA. "
                                 "Maybe it didn't fully upload?")
+            logging.info("Uploaded (unthreaded): ".format(local_path['path']))
             return node
+
+    def finished_uploads(self):
+        self.uploader = None
+
+    def finished_downloads(self):
+        self.downloader = None
 
     def apply_changes(self):
         """If threaded up/downloading is enabled then this begins the process
@@ -628,6 +645,7 @@ class Node(object):
             d = f.as_asset()
             # if folder then get the assets below as well
             if f.kind == 'folder':
+                logging.info("folderHasPath: {}".format(f.path))
                 folder_url = f.links['move']
                 file_list.extend(self._node_file_list(folder_url))
             # for folder of files store this asset
@@ -860,15 +878,18 @@ class OSFProject(Node):
             reply = self.session.put(url, timeout=5.0)
             if reply.status_code == 409:
                 # conflict code indicating the folder does exist
-                print("err 409:", path, self.containers)
-                print(self.links)
+                errStr = ("Err409: {}\n"
+                          " Current containers: {}\n"
+                          " Links: {}"
+                          .format(path, self.containers, self.links))
+                raise OSFError(errStr)
             elif reply.status_code not in [200, 201]:  # some other problem
                 raise HTTPSError("URL:{}\nreply:{}".format(url,
                                  json.dumps(reply.json(), indent=2)))
             else:
                 reply_json = reply.json()['data']
             asset = FileNode(self.session, reply_json).as_asset()
-            logging.info("created remote {} with path={}"
+            logging.info("Created remote {} with path={}"
                          .format(asset['kind'], asset['path']))
         self.containers[path] = asset
         return asset

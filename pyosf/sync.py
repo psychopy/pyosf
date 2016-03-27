@@ -93,6 +93,8 @@ class Changes(object):
                 return 1  # the folder may have been created implicitly already
             else:
                 os.makedirs(full_path)
+                logging.info("Sync.Changes: created folder: {}"
+                             .format(full_path))
                 return 1  # the folder may have been created implicitly already
 
         # this is a file
@@ -101,6 +103,8 @@ class Changes(object):
             os.makedirs(container)
         proj.osf.session.download_file(asset['url'], full_path,
                                        size=asset['size'], threaded=threaded)
+        logging.info("Sync.Changes request: File download: {}"
+                     .format(new_path))
         return 1
 
     def apply_add_remote(self, asset, new_path=None, threaded=False):
@@ -113,8 +117,12 @@ class Changes(object):
             asset['path'] = new_path
         if asset['kind'] == 'folder':
             proj.osf.add_container(asset['path'], kind='folder')
+            logging.info("Sync.Changes request: Create folder: {}"
+                         .format(new_path))
         else:
             proj.osf.add_file(asset, threaded=threaded)
+            logging.info("Sync.Changes request: File upload: {}"
+                         .format(new_path))
         return 1
 
     def apply_mv_local(self, asset, new_path, threaded=False):
@@ -123,7 +131,7 @@ class Changes(object):
         full_path_old = os.path.join(proj.local.root_path, asset['path'])
         shutil.move(full_path_old, full_path_new)
         asset['path'] = new_path
-        logging.info("Sync: Moved file locally: {} -> {}"
+        logging.info("Sync.Changes done: Moved file locally: {} -> {}"
                      .format(asset['full_path'], new_path))
         return 1
 
@@ -131,7 +139,7 @@ class Changes(object):
         proj = self.proj()
         new_folder, new_name = os.path.split(new_path)
         proj.osf.rename_file(asset, new_path)
-        logging.info("Sync: Moved file remote: {} -> {}"
+        logging.info("Sync.Changes request: Move file remote: {} -> {}"
                      .format(asset['path'], new_path))
         return 1
 
@@ -142,13 +150,14 @@ class Changes(object):
             os.remove(full_path)
         if os.path.isdir(full_path):  # might have been removed already?
             os.rmdir(full_path)
-        logging.info("Removed file locally: {}".format(asset['path']))
+        logging.info("Sync.Changes done: Removed file locally: {}"
+                     .format(asset['path']))
         return 1
 
     def apply_del_remote(self, asset, new_path=None, threaded=False):
         proj = self.proj()
         proj.osf.del_file(asset)
-        logging.info("Sync: Del file remote: {}"
+        logging.info("Sync.Changes request: Remove file remotely: {}"
                      .format(asset['path']))
         return 1
 
@@ -161,12 +170,15 @@ class Changes(object):
         # then fetch new one from remote
         proj.osf.session.download_file(asset['url'], full_path,
                                        size=asset['size'], threaded=threaded)
+        logging.info("Sync.Changes request: Update file locally: {}"
+                     .format(asset['path']))
         return 1
 
     def apply_update_remote(self, asset, new_path=None, threaded=False):
         proj = self.proj()
         proj.osf.add_file(asset, update=True, threaded=threaded)
-        logging.info("Sync: Update file remote: {}".format(asset['path']))
+        logging.info("Sync.Changes request: Update file remotely: {}"
+                     .format(new_path))
         return 1
 
     def apply(self, threaded=False, dry_run=False):
@@ -227,13 +239,16 @@ class Changes(object):
         return prog  # probably a dictionary
 
     def finish_sync(self):
-        """Rebuilds index when the sync has finished
+        """Rebuilds index and saves project file when the sync has finished
         """
         proj = self.proj()
         # when local/remote updates are complete refresh index based on local
         proj.local.rebuild_index()
         proj.index = proj.local.index
         self._set_empty()
+        proj.save()
+        if hasattr(logging, 'flush'):  # psychopy.logging has control of flush
+            logging.flush()
 
     def analyze(self):
         """Take a list of files
@@ -257,12 +272,15 @@ class Changes(object):
                 remote_asset = remote_p[path]
 
                 if asset['kind'] == 'folder':
-                    pass  # for folders check /contents/ not folder itself
+                    # for folders check /contents/ not folder itself
+                    logging.debug("Sync.analyze 111a: {} no action"
+                                  .format(path))
 
                 elif asset[SHA] == remote_asset[SHA] and \
                         asset[SHA] == local_asset[SHA]:
                     # all copies match. Go and have a cup of tea.
-                    pass
+                    logging.debug("Sync.analyze 111b: {} no action"
+                                  .format(path))
 
                 elif asset[SHA] != remote_asset[SHA] and \
                         asset[SHA] != local_asset[SHA]:
@@ -277,6 +295,9 @@ class Changes(object):
                     # and swap the version from the other side
                     self.add_local[remote_path] = remote_asset
                     self.add_remote[local_path] = local_asset
+                    logging.info("Sync.analyze 111c: {} conflict"
+                                 "(changed on local and remote)"
+                                 .format(path))
 
                 elif asset[SHA] != remote_asset[SHA]:
                     # changed remotely only
@@ -284,6 +305,8 @@ class Changes(object):
                     # is the newer one. Could check the date_modified?
                     # But if they differed wouldn't that mean a clock err?
                     self.update_local['path'] = remote_asset
+                    logging.info("Sync.analyze 111d: {} changed remotely"
+                                 .format(path))
 
                 elif asset[SHA] != local_asset[SHA]:
                     # changed locally only
@@ -293,6 +316,8 @@ class Changes(object):
                     # fetch the links from the remote so we can do an update op
                     local_asset['links'] = remote_asset['links']
                     self.update_remote['path'] = local_asset
+                    logging.info("Sync.analyze 111e: {} changed locally"
+                                 .format(path))
 
                 # don't re-analyze
                 del local_p[path]
@@ -301,7 +326,9 @@ class Changes(object):
             elif path not in remote_p.keys() and path not in local_p.keys():
                 # code:100
                 # Was deleted in both. Forget about it
-                pass
+                logging.debug("Sync.analyze 100: {}"
+                              "deleted locally and remotely"
+                              .format(path))
 
             elif path not in local_p.keys():
                 remote_asset = remote_p[path]
@@ -314,9 +341,15 @@ class Changes(object):
                     # local: just add the new asset with new path
                     self.add_local[new_path] = remote_asset
                     self.mv_remote[new_path] = remote_asset
+                    logging.warn("Sync.analyze 101a: {} conflict "
+                                  "(deleted locally and changed remotely)"
+                                  .format(path))
                 else:
                     # deleted locally unchanged remotely. Delete remotely
                     self.del_remote[asset['path']] = remote_asset
+                    logging.info("Sync.analyze 101b: {}  "
+                                  "deleted locally (and unchanged remotely)"
+                                  .format(path))
                 del remote_p[path]  # remove so we don't re-analyze
 
             elif path not in remote_p.keys():
@@ -331,9 +364,15 @@ class Changes(object):
                     self.mv_local[new_path] = local_asset
                     # local: just add the new asset with new path
                     self.add_remote[new_path] = local_asset
+                    logging.warn("Sync.analyze 110a: {} conflict "
+                                  "(deleted remotely unchanged locally)"
+                                  .format(path))
                 else:
                     # deleted remotely unchanged locally. Delete locally
                     self.del_local[asset['path']] = asset
+                    logging.info("Sync.analyze 110b: {} "
+                                 "deleted remotely (and unchanged locally)"
+                                 .format(path))
                 del local_p[path]  # remove so we don't re-analyse
 
         # go through the files in the local
@@ -348,16 +387,22 @@ class Changes(object):
                 # code:011
                 if remote_asset[SHA] == local_asset[SHA]:
                     # both copies match but not in index (user uplaoded?)
-                    pass  # nothing to do
+                    logging.debug("Sync.analyze 011a: {} "
+                                  "added remotely and locally (identical file)"
+                                  .format(path))
                 del remote_p[path]
             else:
                 # code:010
                 self.add_remote[path] = local_asset
+                logging.info("Sync.analyze 010a: {} added locally"
+                             .format(path))
 
         # go through the files in the remote
         for path, remote_asset in remote_p.items():
             # code:001 has been created remotely
             self.add_local[path] = remote_asset
+            logging.info("Sync.analyze 001a: {} added remotely"
+                         .format(path))
 
 
 def recreated_path(path):

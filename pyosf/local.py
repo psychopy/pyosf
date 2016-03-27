@@ -18,6 +18,11 @@ import json
 import hashlib
 from . import constants
 
+try:
+    from psychopy import logging
+except ImportError:
+    import logging
+
 
 class LocalFiles(object):
     def __init__(self, root_path):
@@ -33,6 +38,7 @@ class LocalFiles(object):
     def rebuild_index(self):
         self._index = self._create_index()
         self._needs_rebuild_index = False
+        logging.info("Indexing LocalFiles")
 
     def _create_index(self, path=None):
         """Scans the tree of nodes recursively and returns
@@ -89,4 +95,4 @@ class LocalFiles(object):
         """Save the tree of this path to a json file
         """
         with open(filename, 'wb') as f:
-            json.dump(self.index, f, indent=4)
+            json.dump(self.index, f, indent=2)
