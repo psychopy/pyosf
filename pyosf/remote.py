@@ -33,6 +33,7 @@ NOT_STARTED = 0
 STARTED = 1
 FINISHED = -1
 
+default_chunk_size = 65536  # 65Kb
 
 class AuthError(Exception):
     """Authentication error while connecting to the OSF"""
@@ -98,7 +99,7 @@ class BufferReader(object):
     class provides that by simulating a file.read method but using chunks
     (and tracking how much has been sent)
     """
-    def __init__(self, filepath, chunk_size, callback=None):
+    def __init__(self, filepath, chunk_size=default_chunk_size, callback=None):
         self._callback = callback
         self._progress = 0
         self.chunk_size = chunk_size
@@ -121,7 +122,7 @@ class BufferReader(object):
 
 class PushPullThread(threading.Thread):
     def __init__(self, session, kind='push',
-                 chunk_size=65536,
+                 chunk_size=default_chunk_size,
                  finished_callback=None):  # 65Kb
         threading.Thread.__init__(self)
         self.finished_callback = finished_callback
@@ -210,7 +211,7 @@ class Session(requests.Session):
     for project read/write access
     """
     def __init__(self, username=None, password=None, token=None, otp=None,
-                 remember_me=True):
+                 remember_me=True, chunk_size=default_chunk_size):
         """Create a session to send requests with the OSF server
 
         Provide either username and password for authentication with a new
@@ -234,6 +235,7 @@ class Session(requests.Session):
         # placeholders for up/downloader threads
         self.downloader = None
         self.uploader = None
+        self.chunk_size = default_chunk_size
 
     def open_project(self, proj_id):
         """Returns a OSF_Project object or None (if that id couldn't be opened)
@@ -464,7 +466,7 @@ class Session(requests.Session):
             if local_md5 != node.json['attributes']['extra']['hashes']['md5']:
                 raise Exception("Uploaded file did not match existing SHA. "
                                 "Maybe it didn't fully upload?")
-            logging.info("Uploaded (unthreaded): ".format(local_path['path']))
+            logging.info("Uploaded (unthreaded): ".format(local_path))
             return node
 
     def finished_uploads(self):
@@ -882,9 +884,11 @@ class OSFProject(Node):
             if reply.status_code == 409:
                 # conflict code indicating the folder does exist
                 errStr = ("Err409: {}\n"
+                          " Tried URL: {}\n"
                           " Current containers: {}\n"
                           " Links: {}"
-                          .format(path, self.containers, self.links))
+                          .format(path, url,
+                                  self.containers, self.links))
                 raise OSFError(errStr)
             elif reply.status_code not in [200, 201]:  # some other problem
                 raise HTTPSError("URL:{}\nreply:{}".format(url,

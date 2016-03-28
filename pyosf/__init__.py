@@ -1,4 +1,4 @@
-__version__ = '1.0.0'
+__version__ = '1.0.1'
 __license__ = 'MIT'
 __author__ = 'Jonathan Peirce'
 __author_email__ = 'jon@peirce.org.uk'
@@ -13,6 +13,9 @@ import os
 
 # create a logfile for this session
 logfile_path = os.path.join(constants.PYOSF_FOLDER, 'last_session.log')
+if not os.path.isdir(constants.PYOSF_FOLDER):
+    os.makedirs(constants.PYOSF_FOLDER)
+# prefer psychopy logging but use built-in logging if not available
 try:
     from psychopy import logging
     logfile = logging.LogFile(logfile_path, level=logging.DEBUG)
