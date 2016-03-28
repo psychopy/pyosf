@@ -866,18 +866,20 @@ class OSFProject(Node):
         if path == "":
             asset = self.as_asset()
         else:
-            container_path, name = os.path.split(path)
-            if container_path == "":  # we reached the root of the node
+            outer_path, name = os.path.split(path)
+            if outer_path == "":  # we reached the root of the node
                 url_create = self.links['new_folder']
-            elif container_path not in self.containers:
-                logging.info("Needing new folder: {}".format(container_path))
-                container = self.add_container(container_path)
+                logging.info("Use root container for: {}"
+                             .format(path))
+            elif outer_path not in self.containers:
+                logging.info("Needing new folder: {}".format(outer_path))
+                container = self.add_container(outer_path)
                 logging.info("Basing it in {}".format(container))
                 url_create = container['links']['new_folder']
             else:
-                asset = self.containers[container_path]
-                logging.info("Using existing {}".format(container_path))
-                return asset
+                container = self.containers[outer_path]
+                url_create = container['links']['new_folder']
+                logging.info("Using existing {}".format(outer_path))
 
             url = "{}&name={}".format(url_create, name)
             reply = self.session.put(url, timeout=5.0)
