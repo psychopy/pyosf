@@ -17,6 +17,15 @@ It can be distributed freely under the MIT license.
 [![Build Status](https://travis-ci.org/psychopy/pyosf.svg?branch=master)](https://travis-ci.org/psychopy/pyosf)
 [![codecov.io](https://codecov.io/github/psychopy/pyosf/coverage.svg?branch=master)](https://codecov.io/github/psychopy/pyosf?branch=master)
 
+Installation
+-------------------
+
+`pyosf` is compatible with Linux, OS X and Windows, and with Python 2.7 and Python 3.4 (upwards)
+
+Install it with::
+
+	pip install pyosf
+
 Usage
 ---------
 
@@ -24,7 +33,7 @@ When you first create a `Project`, or to perform searches for projects, you need
 
     import pyosf
     session = pyosf.Session(username="name@gmail.com", password="xxyxyayxy")
-	
+
 The `Session` allows you to conduct searches::
 
 ```python
@@ -40,7 +49,7 @@ osf_proj = session.open_project(proj_id)  # or this if you know the project id
 
 Then you can create a `Project` object to track the remote and local files. To do this you need:
     - project_file: a location to store project info
-    - root_path: 
+    - root_path:
     - osf: an OSF project object from a `Session`
     OR
     - simply a project file location, on subsequent repeats
