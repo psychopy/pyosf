@@ -283,6 +283,9 @@ class Session(requests.Session):
             raise OSFError("You can only delete projects you own")
         elif reply.status_code == 204:
             logging.info("Successfully deleted project {}".format(id))
+        else:
+            raise OSFError("Failed to delete project: {}\n {}:{}"
+                           .format(id, reply.status_code, reply.data))
 
     def find_projects(self, search_str, tags="psychopy"):
         """
