@@ -102,7 +102,7 @@ class TestSession(object):
                                            tags=['junkTag', 'test'])
         nProjectsNow = len(self.session.find_user_projects())
         assert nProjectsNow == nProjects+1
-        self.session.delete_project(proj)
+        self.session.delete_project(proj.id)
         nProjectsNow = len(self.session.find_user_projects())
         assert nProjectsNow == nProjects
 

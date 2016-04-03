@@ -275,6 +275,8 @@ class Session(requests.Session):
     def delete_project(self, id):
         """Warning, this deletes a project irreversibly
         """
+        if isinstance(id, OSFProject):
+            id = id.id  # we want just the id field
         url = "{}/nodes/{}/".format(constants.API_BASE, id)
         reply = self.delete(url)
         if reply.status_code == 403:
