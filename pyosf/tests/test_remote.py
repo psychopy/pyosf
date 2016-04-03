@@ -40,7 +40,7 @@ class TestSession(object):
 
     def test_search_projects(self):
         projs = self.session.find_projects('Is it just motion',
-                                                  tags='PsychoPy')
+                                           tags='PsychoPy')
         print("Found projects by name : ")
         for proj in projs:
             print(" - {}".format(proj.title))
@@ -91,6 +91,20 @@ class TestSession(object):
                 size = ""
             print(' - {} ({},)'.format(this_file['path'],
                                        this_file['kind'], size))
+
+    def test_create_delete_proj(self):
+        nProjects = len(self.session.find_user_projects())
+        longPara = """Testing that the description works, with unicode chars:
+        ‰ Ä ™
+        """
+        proj = self.session.create_project(title="A test project with tags",
+                                           descr=longPara,
+                                           tags=['junkTag', 'test'])
+        nProjectsNow = len(self.session.find_user_projects())
+        assert nProjectsNow == nProjects+1
+        self.session.delete_project(proj)
+        nProjectsNow = len(self.session.find_user_projects())
+        assert nProjectsNow == nProjects
 
 if __name__ == "__main__":
     import pytest

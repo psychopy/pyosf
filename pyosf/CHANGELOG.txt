@@ -1,0 +1,21 @@
+Changelog
+==============
+
+
+1.0.2
+----------
+
+Added support for creating and deleting projects on OSF
+
+1.0.1
+----------
+
+Released on PyPI
+Added logging to operations
+
+1.0.0
+----------
+
+All basic functionality working and tests passing
+    - can upload/download files threaded or immediately
+    - all sync rules applied

@@ -242,6 +242,46 @@ class Session(requests.Session):
         """
         return OSFProject(session=self, id=proj_id)
 
+    def create_project(self, title, descr="", tags=[], public=False,
+                       category='project'):
+        url = "{}/nodes/".format(constants.API_BASE, self.user_id)
+        if type(tags) != list:  # given a string so convert to list
+            tags = tags.split(",")
+
+        body = {
+            'data': {
+                'type': 'nodes',
+                'attributes': {
+                    'title': title,
+                    'category': category,
+                    'description': descr,
+                    'tags': tags,
+                    'public': public,
+                }
+            }
+        }
+
+        reply = self.post(
+            url,
+            data=json.dumps(body),
+            headers=self.headers,
+            timeout=10.0)
+        if reply.status_code not in [200, 201]:
+            raise OSFError("Failed to create project at:\n  {}".format(url))
+        project_node = OSFProject(session=self, id=reply.json()['data'])
+        logging.info("Successfully created project {}".format(project_node.id))
+        return project_node
+
+    def delete_project(self, id):
+        """Warning, this deletes a project irreversibly
+        """
+        url = "{}/nodes/{}/".format(constants.API_BASE, id)
+        reply = self.delete(url)
+        if reply.status_code == 403:
+            raise OSFError("You can only delete projects you own")
+        elif reply.status_code == 204:
+            logging.info("Successfully deleted project {}".format(id))
+
     def find_projects(self, search_str, tags="psychopy"):
         """
         Parameters

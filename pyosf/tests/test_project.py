@@ -70,7 +70,7 @@ class TestProjectChanges():
         do_sync(proj)
 
     def setup_class(self):
-        self.proj_id = 'qgt58'
+        self.proj_id = 'degaw'
         self.this_dir, filename = os.path.split(__file__)
         self.files_orig = join(self.this_dir, "files_orig")
         self.tmp_folder = join(self.this_dir, "tmp")
