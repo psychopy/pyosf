@@ -285,7 +285,7 @@ class Session(requests.Session):
             logging.info("Successfully deleted project {}".format(id))
         else:
             raise OSFError("Failed to delete project: {}\n {}:{}"
-                           .format(id, reply.status_code, reply.data))
+                           .format(id, reply.status_code, reply.json()['data']))
 
     def find_projects(self, search_str, tags="psychopy"):
         """

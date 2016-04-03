@@ -104,7 +104,7 @@ class TestSession(object):
         nProjectsNow = len(self.session.find_user_projects())
         time.sleep(0.5)
         assert nProjectsNow == nProjects+1
-        time.sleep(2.0)  # don't delete before everything calms down
+        time.sleep(5.0)  # don't delete before everything calms down
         self.session.delete_project(proj.id)
         time.sleep(0.5)
         nProjectsNow = len(self.session.find_user_projects())
