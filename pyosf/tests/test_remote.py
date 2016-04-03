@@ -100,13 +100,13 @@ class TestSession(object):
         """
         proj = self.session.create_project(title="A test project with tags",
                                            descr=longPara,
-                                           tags=['junkTag', 'test'])
+                                           tags=['programming', 'test'])
         nProjectsNow = len(self.session.find_user_projects())
         time.sleep(0.5)
         assert nProjectsNow == nProjects+1
         time.sleep(5.0)  # don't delete before everything calms down
         self.session.delete_project(proj.id)
-        time.sleep(0.5)
+        time.sleep(5.0)
         nProjectsNow = len(self.session.find_user_projects())
         assert nProjectsNow == nProjects
 
