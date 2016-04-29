@@ -580,7 +580,6 @@ class Node(object):
         if session is None:
             session = Session()  # create a default (anonymous Session)
         self.session = session
-
         if type(id) is dict:
             self.json = id
             id = self.json['id']
@@ -591,18 +590,17 @@ class Node(object):
                 self.json = reply.json()['data']
                 id = self.json['id']
             else:
-                raise HTTPSError("Failed to create session from OSF_id:\n{}"
-                                 .format(reply))
+                raise HTTPSError("Failed to create session from url:\n{}"
+                                 .format(reply, id))
         else:
             # treat as OSF id and fetch the URL
-            reply = self.session.get("{}/nodes/{}/"
-                                     .format(constants.API_BASE, id),
-                                     timeout=5.0)
+            url = "{}/nodes/{}/".format(constants.API_BASE, id)
+            reply = self.session.get(url, timeout=5.0)
             if reply.status_code == 200:
                 self.json = reply.json()['data']
             else:
-                raise HTTPSError("Failed to create session from OSF_id: {}"
-                                 .format(reply))
+                raise HTTPSError("Failed to create session from OSF_id:\n {}: {}\n"
+                                 .format(reply, url))
         # also get info about files if possible
         files_reply = self.session.get("{}/nodes/{}/files"
                                        .format(constants.API_BASE, id),

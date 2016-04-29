@@ -47,11 +47,12 @@ class Project(object):
 
     """
     def __init__(self, project_file=None, root_path=None, osf=None,
-                 autosave=True):
+                 name='', autosave=True):
         self.autosave = autosave  # try to save file automatically on __del__
         self.project_file = project_file
         self.root_path = root_path  # overwrite previous (indexed) location
         self.osf = osf  # not needed if project_file exists
+        self.name = name  # not needed but allows storing a short descr name
         # load the project file (if exists) for info about previous sync
         index, username, project_id, root_path = self.load(project_file)
         self.index = index or []
@@ -102,6 +103,7 @@ class Project(object):
             - the project id
             - the `root_path`
             - the current files `index`
+            - a optional short `name` for the project
 
         Parameters
         ----------
@@ -119,6 +121,7 @@ class Project(object):
         # create the fields to save
         d = {}
         d['root_path'] = self.root_path
+        d['name'] = self.name
         d['username'] = self.osf.session.username
         d['project_id'] = self.osf.id
         d['index'] = self.index
@@ -138,6 +141,7 @@ class Project(object):
             - the `username` (so `remote.Project` can fetch an auth token)
             - the project id the `root_path`
             - the current files `index`
+            - a optional short `name` for the project
 
         Parameters
         ----------
@@ -163,8 +167,12 @@ class Project(object):
             index = d['index']
             project_id = d['project_id']
             root_path = d['root_path']
+            if 'name' in d:
+                name = d['name']
+            else:
+                name = ''
             logging.info('Loaded proj: {}'.format(os.path.abspath(proj_path)))
-        return index, username, project_id, root_path
+        return index, username, project_id, root_path, name
 
     def get_changes(self):
         """Return the changes to be applied
