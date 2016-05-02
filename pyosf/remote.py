@@ -170,7 +170,7 @@ class PushPullThread(threading.Thread):
         # do the upload
         file_buffer = BufferReader(asset['local_path'],
                                    self.chunk_size, self.info_callback)
-        reply = session.put(asset['url'], data=file_buffer, timeout=5.0)
+        reply = session.put(asset['url'], data=file_buffer, timeout=10.0)
         # check the upload worked (md5 checksum)
         with open(asset['local_path'], 'rb') as f:
             local_md5 = hashlib.md5(f.read()).hexdigest()
@@ -188,7 +188,7 @@ class PushPullThread(threading.Thread):
 
     def download_file(self, asset, session):
         self.this_file_prog = 0
-        reply = session.get(asset['url'], stream=True, timeout=5.0)
+        reply = session.get(asset['url'], stream=True, timeout=10.0)
         if reply.status_code == 200:
             with open(asset['local_path'], 'wb') as f:
                 for chunk in reply.iter_content(self.chunk_size):
@@ -316,7 +316,7 @@ class Session(requests.Session):
         logging.info("Searching OSF using: {}".format(url))
         t0 = time.time()
 
-        reply = self.get(url, timeout=5.0)
+        reply = self.get(url, timeout=10.0)
         logging.info("Download results took: {}s".format(time.time()-t0))
         t1 = time.time()
         reply = reply.json()
@@ -333,7 +333,7 @@ class Session(requests.Session):
         """
         reply = self.get("{}/users/?filter[full_name]={}"
                          .format(constants.API_BASE, search_str),
-                         timeout=5.0).json()
+                         timeout=10.0).json()
         users = []
         for thisUser in reply['data']:
             attrs = thisUser['attributes']
@@ -349,7 +349,7 @@ class Session(requests.Session):
             user_id = self.user_id
         full_url = "{}/users/{}/nodes?filter[category]=project" \
                    .format(constants.API_BASE, user_id)
-        reply = self.get(full_url, timeout=5.0)
+        reply = self.get(full_url, timeout=10.0)
         if reply.status_code not in [200, 201]:
             raise OSFError("No user found. Sent:\n   {}".format(full_url))
         projs = []
@@ -376,7 +376,7 @@ class Session(requests.Session):
             }
         self.headers.update(headers)
         # then populate self.userID and self.userName
-        resp = self.get(constants.API_BASE+"/users/me/", timeout=5.0)
+        resp = self.get(constants.API_BASE+"/users/me/", timeout=10.0)
         if resp.status_code != 200:
             raise AuthError('Invalid credentials trying to get user data:\n{}'
                             .format(resp.json()))
@@ -434,14 +434,14 @@ class Session(requests.Session):
             token_url,
             headers=headers,
             data=json.dumps(token_request_body),
-            auth=(username, password), timeout=5.0,
+            auth=(username, password), timeout=10.0,
             )
         if resp.status_code in (401, 403):
             # If login failed because of a missing two-factor authentication
             # code, notify the user to try again
             # This header appears for basic auth requests, and only when a
             # valid password is provided
-            otp_val = resp.headers.get('X-OSF-OTP', '', timeout=5.0)
+            otp_val = resp.headers.get('X-OSF-OTP', '', timeout=10.0)
             if otp_val.startswith('required'):
                 raise AuthError('Must provide code for two-factor'
                                 'authentication')
@@ -477,7 +477,7 @@ class Session(requests.Session):
             self.downloader.add_asset(url, local_path, size)
         else:
             # download immediately
-            reply = self.get(url, stream=True, timeout=5.0)
+            reply = self.get(url, stream=True, timeout=10.0)
             if reply.status_code == 200:
                 with open(local_path, 'wb') as f:
                     for chunk in reply.iter_content(self.chunk_size):
@@ -499,7 +499,7 @@ class Session(requests.Session):
             self.uploader.add_asset(url, local_path, size)
         else:
             with open(local_path, 'rb') as f:
-                reply = self.put(url, data=f, timeout=5.0)
+                reply = self.put(url, data=f, timeout=10.0)
             with open(local_path, 'rb') as f:
                 local_md5 = hashlib.md5(f.read()).hexdigest()
             if reply.status_code not in [200, 201]:
@@ -585,7 +585,7 @@ class Node(object):
             id = self.json['id']
         elif id.startswith('http'):
             # treat as URL. Extract the id from the request data
-            reply = self.session.get(id, timeout=5.0)
+            reply = self.session.get(id, timeout=10.0)
             if reply.status_code == 200:
                 self.json = reply.json()['data']
                 id = self.json['id']
@@ -595,7 +595,7 @@ class Node(object):
         else:
             # treat as OSF id and fetch the URL
             url = "{}/nodes/{}/".format(constants.API_BASE, id)
-            reply = self.session.get(url, timeout=5.0)
+            reply = self.session.get(url, timeout=10.0)
             if reply.status_code == 200:
                 self.json = reply.json()['data']
             else:
@@ -604,7 +604,7 @@ class Node(object):
         # also get info about files if possible
         files_reply = self.session.get("{}/nodes/{}/files"
                                        .format(constants.API_BASE, id),
-                                       timeout=5.0)
+                                       timeout=10.0)
         if files_reply.status_code == 200:
             for provider in files_reply.json()['data']:
                 if provider['attributes']['name'] == 'osfstorage':
@@ -652,7 +652,7 @@ class Node(object):
         if "children" in self.json['relationships']:
             req = self.session.get("{}/nodes/{}/children"
                                    .format(constants.API_BASE, self.id),
-                                   timeout=5.0)
+                                   timeout=10.0)
             for node in req.json()['data']:
                 child_list.append(Node(session=self.session, id=node["id"]))
         return child_list
@@ -682,7 +682,7 @@ class Node(object):
         if url is None:  # use the root of this Node id
             url = "{}/nodes/{}/files/osfstorage".format(constants.API_BASE,
                                                         self.id)
-        reply = self.session.get(url, timeout=5.0).json()['data']
+        reply = self.session.get(url, timeout=10.0).json()['data']
         file_list = []
         for entry in reply:
             f = FileNode(self.session, entry)
@@ -791,7 +791,7 @@ class FileNode(Node):
     @property
     def info(self):
         infoLink = self.links['info']
-        reply = self.session.get(infoLink, timeout=5.0)
+        reply = self.session.get(infoLink, timeout=10.0)
         return reply.json()['data']
 
     @property
@@ -924,7 +924,7 @@ class OSFProject(Node):
                 logging.info("Using existing {}".format(outer_path))
 
             url = "{}&name={}".format(url_create, name)
-            reply = self.session.put(url, timeout=5.0)
+            reply = self.session.put(url, timeout=10.0)
             if reply.status_code == 409:
                 # conflict code indicating the folder does exist
                 errStr = ("Err409: {}\n"
@@ -990,7 +990,7 @@ class OSFProject(Node):
         body = """{"action":   "rename",
                 "rename":   "%s"}
                """ % (new_name)
-        reply = self.session.post(url_move, data=body, timeout=5.0)
+        reply = self.session.post(url_move, data=body, timeout=10.0)
         if reply.status_code not in [200, 201]:
             raise HTTPSError("Failed remote file move URL:{}\nreply:{}"
                              .format(url_move,
