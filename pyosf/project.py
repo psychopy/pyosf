@@ -165,7 +165,7 @@ class Project(object):
         """
         changes = sync.Changes(proj=self)
         self.connected = True  # we had to go online to get changes
-        return
+        return changes
 
     @property
     def osf(self):
