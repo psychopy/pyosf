@@ -51,12 +51,13 @@ class Project(object):
         self.autosave = autosave  # try to save file automatically on __del__
         self.project_file = project_file
         self.root_path = root_path  # overwrite previous (indexed) location
-        self.osf = osf  # not needed if project_file exists
-        self.name = name  # not needed but allows storing a short descr name
         # load the project file (if exists) for info about previous sync
-        index, username, project_id, root_path = self.load(project_file)
+        index, username, project_id, root_path, name = self.load(project_file)
         self.index = index or []
         self.username = username
+        self.project_id = project_id
+        self.name = name  # not needed but allows storing a short descr name
+        self.connected = False  # have we gone online yet?
 
         # check/set root_path
         if self.root_path is None:
@@ -72,22 +73,7 @@ class Project(object):
         else:
             self.local = local.LocalFiles(self.root_path)
 
-        # check/set remote session
-        if osf is None:
-            if username is None:
-                raise AttributeError("No osf project was provided but also "
-                                     "no username or authentication token")
-            else:  # we have no remote but a username so try a remote.Session
-                session = remote.Session(username)
-                if project_id is None:
-                    raise AttributeError("No project id was available. "
-                                         "Project needs OSFProject or a "
-                                         "previous project_file")
-                else:
-                    self.osf = remote.OSFProject(session=session,
-                                                 id=project_id)
-        else:
-            self.osf = osf
+        self._osf = osf  # the self.osf is as property set on-access
 
     def __repr__(self):
         return "Project({})".format(self.project_file)
@@ -159,7 +145,7 @@ class Project(object):
             proj_path = self.project_file
         if not os.path.isfile(os.path.abspath(proj_path)):
             logging.warn('No proj file: {}'.format(os.path.abspath(proj_path)))
-            return (None, None, None, None)
+            return (None, None, None, None, None)
         else:
             with open(os.path.abspath(proj_path), 'r') as f:
                 d = json.load(f)
@@ -172,9 +158,38 @@ class Project(object):
             else:
                 name = ''
             logging.info('Loaded proj: {}'.format(os.path.abspath(proj_path)))
-        return index, username, project_id, root_path, name
+        return (index, username, project_id, root_path, name)
 
     def get_changes(self):
         """Return the changes to be applied
         """
-        return sync.Changes(proj = self)
+        changes = sync.Changes(proj=self)
+        self.connected = True  # we had to go online to get changes
+        return
+
+    @property
+    def osf(self):
+        """Get/sets the osf attribute. When
+        """
+        if self._osf is None:
+            self.osf = self.project_id  # go to setter using project_id
+        # if one of the above worked then self._osf should exist by now
+        return self._osf
+
+    @osf.setter
+    def osf(self, project):
+        if isinstance(project, remote.OSFProject):
+            self._osf = project
+        elif self.username is None:  # if no project then we need username
+            raise AttributeError("No osf project was provided but also "
+                                 "no username or authentication token")
+        else:  # with username create session and then project
+            session = remote.Session(self.username)
+            if self.project_id is None:
+                raise AttributeError("No project id was available. "
+                                     "Project needs OSFProject or a "
+                                     "previous project_file")
+            else:
+                self._osf = remote.OSFProject(session=session,
+                                              id=self.project_id)
+                self.connected = True
