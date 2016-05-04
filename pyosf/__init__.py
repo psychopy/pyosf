@@ -6,7 +6,8 @@ __maintainer_email__ = 'jon@peirce.org.uk'
 __url__ = 'https://github.com/psychopy/pyosf'
 __downloadUrl__ = 'https://github.com/psychopy/pyosf/releases/'
 
-from .remote import Session, TokenStorage, AuthError, HTTPSError
+from .remote import Session, TokenStorage
+from .exceptions import AuthError, HTTPSError, OSFError
 from .project import Project
 from . import constants
 import os

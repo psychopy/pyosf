@@ -27,6 +27,7 @@ except ImportError:
     import logging
 from . import constants
 from .tools import dict_from_list, find_by_key
+from . import exceptions
 
 # for the status of the PushPullThread
 NOT_STARTED = 0
@@ -34,28 +35,6 @@ STARTED = 1
 FINISHED = -1
 
 default_chunk_size = 65536  # 65Kb
-
-class AuthError(Exception):
-    """Authentication error while connecting to the OSF"""
-    pass
-
-
-class HTTPSError(Exception):
-    """Error connecting to web resource
-    """
-    pass
-
-
-class OSFError(Exception):
-    """Errors accessing OSF files (e.g. no such user)
-    """
-    pass
-
-
-class CancelledError(Exception):
-    """Detect when a file upload is cancelled
-    """
-    pass
 
 
 class TokenStorage(dict):
@@ -116,7 +95,7 @@ class BufferReader(object):
             try:
                 self._callback(self._progress)
             except:  # catches exception from the callback
-                raise CancelledError('The upload was cancelled.')
+                raise exceptions.CancelledError('The upload was cancelled.')
         return chunk
 
 
@@ -175,14 +154,14 @@ class PushPullThread(threading.Thread):
         with open(asset['local_path'], 'rb') as f:
             local_md5 = hashlib.md5(f.read()).hexdigest()
         if reply.status_code not in [200, 201]:
-            raise HTTPSError("URL:{}\nreply:{}"
-                             .format(asset['url'],
-                                     json.dumps(reply.json(), indent=2)))
+            raise exceptions.HTTPSError(
+                "URL:{}\nreply:{}"
+                .format(asset['url'], json.dumps(reply.json(), indent=2)))
         # reply includes info about the FileNode created so process that
         uploadedAttrs = reply.json()['data']['attributes']
         if local_md5 != uploadedAttrs['extra']['hashes']['md5']:
-            raise Exception("Uploaded file did not match existing SHA. "
-                            "Maybe it didn't fully upload?")
+            raise exceptions.OSFError("Uploaded file did not match existing "
+                                      "SHA. Maybe it didn't fully upload?")
         logging.info("Async upload complete: {} to {}"
                      .format(asset['local_path'], asset['url']))
 
@@ -266,7 +245,8 @@ class Session(requests.Session):
             headers=self.headers,
             timeout=10.0)
         if reply.status_code not in [200, 201]:
-            raise OSFError("Failed to create project at:\n  {}".format(url))
+            raise exceptions.OSFError("Failed to create project at:\n  {}"
+                                      .format(url))
         project_node = OSFProject(session=self, id=reply.json()['data'])
         logging.info("Successfully created project {}".format(project_node.id))
         return project_node
@@ -279,12 +259,12 @@ class Session(requests.Session):
         url = "{}/nodes/{}/".format(constants.API_BASE, id)
         reply = self.delete(url)
         if reply.status_code == 403:
-            raise OSFError("You can only delete projects you own")
+            raise exceptions.OSFError("You can only delete projects you own")
         elif reply.status_code == 204:
             logging.info("Successfully deleted project {}".format(id))
         else:
-            raise OSFError("Failed to delete project: {}\n {}:{}"
-                           .format(id, reply.status_code, reply))
+            raise exceptions.OSFError("Failed to delete project: {}\n {}:{}"
+                                      .format(id, reply.status_code, reply))
 
     def find_projects(self, search_str, tags="psychopy"):
         """
@@ -351,7 +331,8 @@ class Session(requests.Session):
                    .format(constants.API_BASE, user_id)
         reply = self.get(full_url, timeout=10.0)
         if reply.status_code not in [200, 201]:
-            raise OSFError("No user found. Sent:\n   {}".format(full_url))
+            raise exceptions.OSFError("No user found. Sent:\n   {}"
+                                      .format(full_url))
         projs = []
         for entry in reply.json()['data']:
             projs.append(OSFProject(session=self, id=entry))
@@ -378,8 +359,8 @@ class Session(requests.Session):
         # then populate self.userID and self.userName
         resp = self.get(constants.API_BASE+"/users/me/", timeout=10.0)
         if resp.status_code != 200:
-            raise AuthError('Invalid credentials trying to get user data:\n{}'
-                            .format(resp.json()))
+            raise exceptions.AuthError("Invalid credentials trying to get "
+                                       "user data:\n{}".format(resp.json()))
         else:
             logging.info("Successful authentication with token")
         json_resp = resp.json()
@@ -409,12 +390,13 @@ class Session(requests.Session):
             try:
                 self.token = tokens[username]
                 return 1
-            except AuthError:
+            except exceptions.AuthError:
                 if password is None:
-                    raise AuthError("User token didn't work and no password "
-                                    "has been provided")
+                    raise exceptions.AuthError("User token didn't work and no "
+                                               "password has been provided")
         elif password is None:
-            raise AuthError("No auth token found and no password given")
+            raise exceptions.AuthError("No auth token found and no "
+                                       "password given")
         token_url = constants.API_BASE+'/tokens/'
         token_request_body = {
             'data': {
@@ -443,12 +425,12 @@ class Session(requests.Session):
             # valid password is provided
             otp_val = resp.headers.get('X-OSF-OTP', '', timeout=10.0)
             if otp_val.startswith('required'):
-                raise AuthError('Must provide code for two-factor'
-                                'authentication')
+                raise exceptions.AuthError('Must provide code for two-factor'
+                                           'authentication')
             else:
-                raise AuthError('Invalid credentials')
+                raise exceptions.AuthError('Invalid credentials')
         elif not resp.status_code == 201:
-            raise AuthError('Invalid authorization response')
+            raise exceptions.AuthError('Invalid authorization response')
         else:
             json_resp = resp.json()
             logging.info("Successfully authenticated with username/password")
@@ -472,8 +454,9 @@ class Session(requests.Session):
         if threaded:
             if self.downloader is None or \
                     self.downloader.status != NOT_STARTED:  # can't re-use
-                self.downloader = PushPullThread(session=self, kind='pull',
-                                    finished_callback=self.finished_downloads)
+                self.downloader = PushPullThread(
+                    session=self, kind='pull',
+                    finished_callback=self.finished_downloads)
             self.downloader.add_asset(url, local_path, size)
         else:
             # download immediately
@@ -494,8 +477,9 @@ class Session(requests.Session):
         if threaded:
             if self.uploader is None or \
                     self.uploader.status != NOT_STARTED:  # can't re-use
-                self.uploader = PushPullThread(session=self, kind='push',
-                                    finished_callback=self.finished_uploads)
+                self.uploader = PushPullThread(
+                    session=self, kind='push',
+                    finished_callback=self.finished_uploads)
             self.uploader.add_asset(url, local_path, size)
         else:
             with open(local_path, 'rb') as f:
@@ -503,13 +487,14 @@ class Session(requests.Session):
             with open(local_path, 'rb') as f:
                 local_md5 = hashlib.md5(f.read()).hexdigest()
             if reply.status_code not in [200, 201]:
-                raise HTTPSError("URL:{}\nreply:{}"
-                                 .format(url,
-                                         json.dumps(reply.json(), indent=2)))
+                raise exceptions.HTTPSError(
+                    "URL:{}\nreply:{}"
+                    .format(url, json.dumps(reply.json(), indent=2)))
             node = FileNode(self, reply.json()['data'])
             if local_md5 != node.json['attributes']['extra']['hashes']['md5']:
-                raise Exception("Uploaded file did not match existing SHA. "
-                                "Maybe it didn't fully upload?")
+                raise exceptions.OSFError(
+                    "Uploaded file did not match existing SHA. "
+                    "Maybe it didn't fully upload?")
             logging.info("Uploaded (unthreaded): ".format(local_path))
             return node
 
@@ -589,18 +574,28 @@ class Node(object):
             if reply.status_code == 200:
                 self.json = reply.json()['data']
                 id = self.json['id']
+            elif reply.status_code == 410:
+                raise exceptions.HTTPSError(
+                    "OSF Project {} appears to have been deleted"
+                    .format(id))
             else:
-                raise HTTPSError("Failed to create session from url:\n{}"
-                                 .format(reply, id))
+                raise exceptions.HTTPSError(
+                    "Failed to fetch OSF Project with URL:\n{}"
+                    .format(reply, id))
         else:
             # treat as OSF id and fetch the URL
             url = "{}/nodes/{}/".format(constants.API_BASE, id)
             reply = self.session.get(url, timeout=10.0)
             if reply.status_code == 200:
                 self.json = reply.json()['data']
+            elif reply.status_code == 410:
+                raise exceptions.HTTPSError(
+                    "OSF Project {} appears to have been deleted"
+                    .format(url))
             else:
-                raise HTTPSError("Failed to create session from OSF_id:\n {}: {}\n"
-                                 .format(reply, url))
+                raise exceptions.HTTPSError(
+                    "Failed to fetch OSF Project with ID:\n {}: {}\n"
+                    .format(reply, url))
         # also get info about files if possible
         files_reply = self.session.get("{}/nodes/{}/files"
                                        .format(constants.API_BASE, id),
@@ -834,9 +829,10 @@ class FileNode(Node):
 
         """
         if self.kind != "file":
-            raise TypeError("pyosf: Attempted to download object of kind={!r}"
-                            "but download is only possible for files"
-                            .format(self.kind))
+            raise exceptions.OSFError(
+                "pyosf: Attempted to download object of kind={!r} "
+                "but download is only possible for files"
+                .format(self.kind))
         url = self.links['download']
         self.session.download_file(url=url, local_path=target_path,
                                    threaded=threaded)
@@ -933,10 +929,11 @@ class OSFProject(Node):
                           " Links: {}"
                           .format(path, url,
                                   self.containers, self.links))
-                raise OSFError(errStr)
+                raise exceptions.OSFError(errStr)
             elif reply.status_code not in [200, 201]:  # some other problem
-                raise HTTPSError("URL:{}\nreply:{}".format(url,
-                                 json.dumps(reply.json(), indent=2)))
+                raise exceptions.HTTPSError(
+                    "URL:{}\nreply:{}"
+                    .format(url, json.dumps(reply.json(), indent=2)))
             else:
                 reply_json = reply.json()['data']
             asset = FileNode(self.session, reply_json).as_asset()
@@ -992,17 +989,17 @@ class OSFProject(Node):
                """ % (new_name)
         reply = self.session.post(url_move, data=body, timeout=10.0)
         if reply.status_code not in [200, 201]:
-            raise HTTPSError("Failed remote file move URL:{}\nreply:{}"
-                             .format(url_move,
-                                     json.dumps(reply.json(), indent=2)))
+            raise exceptions.HTTPSError(
+                "Failed remote file move URL:{}\nreply:{}"
+                .format(url_move, json.dumps(reply.json(), indent=2)))
 
     def del_file(self, asset):
         url_del = asset['links']['delete']
         reply = self.session.delete(url_del)
         if reply.status_code != 204:
-            raise HTTPSError("Failed remote file delete URL:{}\nreply:{}"
-                             .format(url_del,
-                                     json.dumps(reply.json(), indent=2)))
+            raise exceptions.HTTPSError(
+                "Failed remote file delete URL:{}\nreply:{}"
+                .format(url_del, json.dumps(reply.json(), indent=2)))
         if asset['path'] in self.containers:
             del self.containers[asset['path']]
 
