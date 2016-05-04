@@ -64,6 +64,10 @@ class LocalFiles(object):
             return files
         else:
             d['kind'] = "file"
+            try:
+                d['size'] = os.path.getsize(path)
+            except:
+                d['size'] = 0
             with open(path, "rb") as f:
                 hash_func = getattr(hashlib, constants.SHA.lower())
                 d[constants.SHA] = hash_func(f.read()).hexdigest()

@@ -140,9 +140,8 @@ class PushPullThread(threading.Thread):
         if self.finished_callback:
             self.finished_callback()
 
-    def update_progress(self, this_file_prog):
-        """The file chunker needs this method for a callback"""
-        self.this_file_prog = this_file_prog
+    def info_callback(self, progress):
+        self.this_file_prog = progress
 
     def upload_file(self, asset, session):
         self.currFileProgress = 0
@@ -162,6 +161,7 @@ class PushPullThread(threading.Thread):
         if local_md5 != uploadedAttrs['extra']['hashes']['md5']:
             raise exceptions.OSFError("Uploaded file did not match existing "
                                       "SHA. Maybe it didn't fully upload?")
+        self._finished_files_size += asset['size']
         logging.info("Async upload complete: {} to {}"
                      .format(asset['local_path'], asset['url']))
 
@@ -178,9 +178,6 @@ class PushPullThread(threading.Thread):
         self._finished_files_size += asset['size']
         logging.info("Async download complete: {} to {}"
                      .format(asset['local_path'], asset['url']))
-
-    def info_callback(self, progress):
-        self.this_file_prog = progress
 
 
 class Session(requests.Session):
@@ -575,7 +572,7 @@ class Node(object):
                 self.json = reply.json()['data']
                 id = self.json['id']
             elif reply.status_code == 410:
-                raise exceptions.HTTPSError(
+                raise exceptions.DeletedError(
                     "OSF Project {} appears to have been deleted"
                     .format(id))
             else:
@@ -589,7 +586,7 @@ class Node(object):
             if reply.status_code == 200:
                 self.json = reply.json()['data']
             elif reply.status_code == 410:
-                raise exceptions.HTTPSError(
+                raise exceptions.DeletedError(
                     "OSF Project {} appears to have been deleted"
                     .format(url))
             else:

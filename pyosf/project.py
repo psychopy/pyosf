@@ -51,13 +51,15 @@ class Project(object):
         self.autosave = autosave  # try to save file automatically on __del__
         self.project_file = project_file
         self.root_path = root_path  # overwrite previous (indexed) location
-        # load the project file (if exists) for info about previous sync
-        index, username, project_id, root_path, name = self.load(project_file)
-        self.index = index or []
-        self.username = username
-        self.project_id = project_id
         self.name = name  # not needed but allows storing a short descr name
+        # these will be update from project file loading if it exists
+        self.index = []
+        self.username = None
+        self.project_id = None
         self.connected = False  # have we gone online yet?
+        # load the project file (if exists) for info about previous sync
+        if project_file:
+            self.load(project_file)
 
         # check/set root_path
         if self.root_path is None:
@@ -106,8 +108,8 @@ class Project(object):
         d = {}
         d['root_path'] = self.root_path
         d['name'] = self.name
-        d['username'] = self.osf.session.username
-        d['project_id'] = self.osf.id
+        d['username'] = self.username
+        d['project_id'] = self.project_id
         d['index'] = self.index
         # do the actual file save
         with open(proj_path, 'wb') as f:
@@ -142,23 +144,21 @@ class Project(object):
         if proj_path is None:
             proj_path = self.project_file
         if proj_path is None:  # STILL None: need to set later
-            return (None, None, None, None, None)
+            return
         elif not os.path.isfile(os.path.abspath(proj_path)):  # path not found
             logging.warn('No proj file: {}'.format(os.path.abspath(proj_path)))
-            return (None, None, None, None, None)
         else:
             with open(os.path.abspath(proj_path), 'r') as f:
                 d = json.load(f)
-            username = d['username']
-            index = d['index']
-            project_id = d['project_id']
-            root_path = d['root_path']
+            self.username = d['username']
+            self.index = d['index']
+            self.project_id = d['project_id']
+            self.root_path = d['root_path']
             if 'name' in d:
-                name = d['name']
+                self.name = d['name']
             else:
-                name = ''
+                self.name = ''
             logging.info('Loaded proj: {}'.format(os.path.abspath(proj_path)))
-        return (index, username, project_id, root_path, name)
 
     def get_changes(self):
         """Return the changes to be applied
