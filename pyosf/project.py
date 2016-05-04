@@ -68,10 +68,8 @@ class Project(object):
                          "given: {}"
                          "stored: {}".format(root_path, self.root_path))
         if self.root_path is None:
-            raise AttributeError("Project file failed to load a root_path "
-                                 "for the local files and none was provided")
-        else:
-            self.local = local.LocalFiles(self.root_path)
+            logging.warn("Project file failed to load a root_path "
+                         "for the local files and none was provided")
 
         self._osf = osf  # the self.osf is as property set on-access
 
@@ -143,7 +141,9 @@ class Project(object):
         """
         if proj_path is None:
             proj_path = self.project_file
-        if not os.path.isfile(os.path.abspath(proj_path)):
+        if proj_path is None:  # STILL None: need to set later
+            return (None, None, None, None, None)
+        elif not os.path.isfile(os.path.abspath(proj_path)):  # path not found
             logging.warn('No proj file: {}'.format(os.path.abspath(proj_path)))
             return (None, None, None, None, None)
         else:
@@ -193,3 +193,15 @@ class Project(object):
                 self._osf = remote.OSFProject(session=session,
                                               id=self.project_id)
                 self.connected = True
+
+    @property
+    def root_path(self):
+        return self.__dict__['root_path']
+
+    @root_path.setter
+    def root_path(self, root_path):
+        self.__dict__['root_path'] = root_path
+        if root_path is None:
+            self.local = None
+        else:
+            self.local = local.LocalFiles(root_path)
