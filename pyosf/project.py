@@ -73,13 +73,14 @@ class Project(object):
             logging.warn("Project file failed to load a root_path "
                          "for the local files and none was provided")
 
-        self._osf = osf  # the self.osf is as property set on-access
+        self.osf = osf  # the self.osf is as property set on-access
 
     def __repr__(self):
         return "Project({})".format(self.project_file)
 
     def __del__(self):
-        self.save()
+        if self.autosave:
+            self.save()
 
     def save(self, proj_path=None):
         """Save the project to a json-format file
@@ -180,6 +181,8 @@ class Project(object):
     def osf(self, project):
         if isinstance(project, remote.OSFProject):
             self._osf = project
+            self.username = self._osf.session.username
+            self.project_id = self._osf.id
         elif self.username is None:  # if no project then we need username
             raise AttributeError("No osf project was provided but also "
                                  "no username or authentication token")
