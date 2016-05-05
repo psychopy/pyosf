@@ -5,9 +5,11 @@ Changelog
 1.0.3
 ----------
 
-Added name attribute to (local) Projects useful to store short name (e.g. for
+    - Added name attribute to pyosf.Project useful to store short name (e.g. for
 use in menu entries)
-
+    - pyosf.Project doesn't connect to the osf online project until actually needed
+    - Fixed progress updating for threaded uploads
+    
 1.0.2
 ----------
 

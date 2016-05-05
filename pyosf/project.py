@@ -185,13 +185,15 @@ class Project(object):
             self.project_id = self._osf.id
         elif self.username is None:  # if no project then we need username
             raise AttributeError("No osf project was provided but also "
-                                 "no username or authentication token")
+                                 "no username or authentication token: {}"
+                                 .format(project))
         else:  # with username create session and then project
             session = remote.Session(self.username)
             if self.project_id is None:
                 raise AttributeError("No project id was available. "
                                      "Project needs OSFProject or a "
-                                     "previous project_file")
+                                     "previous project_file"
+                                     .format(project))
             else:
                 self._osf = remote.OSFProject(session=session,
                                               id=self.project_id)

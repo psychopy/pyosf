@@ -572,7 +572,7 @@ class Node(object):
                 self.json = reply.json()['data']
                 id = self.json['id']
             elif reply.status_code == 410:
-                raise exceptions.DeletedError(
+                raise exceptions.OSFDeleted(
                     "OSF Project {} appears to have been deleted"
                     .format(id))
             else:
@@ -586,7 +586,7 @@ class Node(object):
             if reply.status_code == 200:
                 self.json = reply.json()['data']
             elif reply.status_code == 410:
-                raise exceptions.DeletedError(
+                raise exceptions.OSFDeleted(
                     "OSF Project {} appears to have been deleted"
                     .format(url))
             else:
