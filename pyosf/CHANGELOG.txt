@@ -1,6 +1,10 @@
 Changelog
 ==============
 
+1.0.4
+----------
+
+    - fixed buglet with error reporting for projects deleted from OSF
 
 1.0.3
 ----------
