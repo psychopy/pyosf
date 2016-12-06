@@ -11,10 +11,13 @@ PROJECT_NAME = 'pyosf'
 APPLICATION_SCOPES = 'osf.full_write'
 
 from os import path
+import sys
+
 home = path.expanduser("~")
 PYOSF_FOLDER = path.join(home, '.pyosf')
 
-SHA = "md5"  # could switch to "sha256"
+if sys.platform.startswith("linux") and not path.isfile(PYOSF_FOLDER):
+    PYOSF_FOLDER = path.join(home, '.local', 'share', 'pyosf')
 
-import sys
+SHA = "md5"  # could switch to "sha256"
 PY3 = sys.version_info > (3,)
