@@ -294,8 +294,8 @@ class Session(requests.Session):
             url += "{}filter[title][icontains]={}".format(intro, search_str)
             intro = "&"
         logging.info("Searching OSF using: {}".format(url))
+        time.sleep(0.1)
         t0 = time.time()
-
         reply = self.get(url, timeout=30.0)
         logging.info("Download results took: {}s".format(time.time()-t0))
         t1 = time.time()
