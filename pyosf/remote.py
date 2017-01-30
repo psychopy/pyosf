@@ -91,6 +91,7 @@ class BufferReader(object):
     def read(self, chunk_size):
         chunk = self._f.read(chunk_size)
         self._progress += int(len(chunk))  # len of actual chunk, not requested
+        time.sleep(0.0001)
         if self._callback:
             try:
                 self._callback(self._progress)
@@ -148,7 +149,9 @@ class PushPullThread(threading.Thread):
         # do the upload
         file_buffer = BufferReader(asset['local_path'],
                                    self.chunk_size, self.info_callback)
-        reply = session.put(asset['url'], data=file_buffer, timeout=10.0)
+        time.sleep(0.01)
+        reply = session.put(asset['url'], data=file_buffer, timeout=30.0)
+        time.sleep(0.01)
         # check the upload worked (md5 checksum)
         with open(asset['local_path'], 'rb') as f:
             local_md5 = hashlib.md5(f.read()).hexdigest()
@@ -167,7 +170,7 @@ class PushPullThread(threading.Thread):
 
     def download_file(self, asset, session):
         self.this_file_prog = 0
-        reply = session.get(asset['url'], stream=True, timeout=10.0)
+        reply = session.get(asset['url'], stream=True, timeout=30.0)
         if reply.status_code == 200:
             with open(asset['local_path'], 'wb') as f:
                 for chunk in reply.iter_content(self.chunk_size):
@@ -293,7 +296,7 @@ class Session(requests.Session):
         logging.info("Searching OSF using: {}".format(url))
         t0 = time.time()
 
-        reply = self.get(url, timeout=10.0)
+        reply = self.get(url, timeout=30.0)
         logging.info("Download results took: {}s".format(time.time()-t0))
         t1 = time.time()
         reply = reply.json()
@@ -310,7 +313,7 @@ class Session(requests.Session):
         """
         reply = self.get("{}/users/?filter[full_name]={}"
                          .format(constants.API_BASE, search_str),
-                         timeout=10.0).json()
+                         timeout=30.0).json()
         users = []
         for thisUser in reply['data']:
             attrs = thisUser['attributes']
@@ -326,7 +329,7 @@ class Session(requests.Session):
             user_id = self.user_id
         full_url = "{}/users/{}/nodes?filter[category]=project" \
                    .format(constants.API_BASE, user_id)
-        reply = self.get(full_url, timeout=10.0)
+        reply = self.get(full_url, timeout=30.0)
         if reply.status_code not in [200, 201]:
             raise exceptions.OSFError("No user found. Sent:\n   {}"
                                       .format(full_url))
@@ -457,7 +460,7 @@ class Session(requests.Session):
             self.downloader.add_asset(url, local_path, size)
         else:
             # download immediately
-            reply = self.get(url, stream=True, timeout=10.0)
+            reply = self.get(url, stream=True, timeout=30.0)
             if reply.status_code == 200:
                 with open(local_path, 'wb') as f:
                     for chunk in reply.iter_content(self.chunk_size):
@@ -480,7 +483,7 @@ class Session(requests.Session):
             self.uploader.add_asset(url, local_path, size)
         else:
             with open(local_path, 'rb') as f:
-                reply = self.put(url, data=f, timeout=10.0)
+                reply = self.put(url, data=f, timeout=30.0)
             with open(local_path, 'rb') as f:
                 local_md5 = hashlib.md5(f.read()).hexdigest()
             if reply.status_code not in [200, 201]:
@@ -984,7 +987,7 @@ class OSFProject(Node):
         body = """{"action":   "rename",
                 "rename":   "%s"}
                """ % (new_name)
-        reply = self.session.post(url_move, data=body, timeout=10.0)
+        reply = self.session.post(url_move, data=body, timeout=30.0)
         if reply.status_code not in [200, 201]:
             raise exceptions.HTTPSError(
                 "Failed remote file move URL:{}\nreply:{}"
