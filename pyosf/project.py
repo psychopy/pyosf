@@ -17,6 +17,7 @@ Created on Sun Feb  7 21:31:15 2016
 from __future__ import absolute_import, print_function
 import os
 import sys
+import requests
 try:
     from psychopy import logging
 except:
@@ -188,7 +189,12 @@ class Project(object):
                                  "no username or authentication token: {}"
                                  .format(project))
         else:  # with username create session and then project
-            session = remote.Session(self.username)
+            try:
+                session = remote.Session(self.username)
+            except requests.exceptions.ConnectionError:
+                self._osf = None
+                self.connected = False
+                return
             if self.project_id is None:
                 raise AttributeError("No project id was available. "
                                      "Project needs OSFProject or a "

@@ -102,7 +102,8 @@ class Changes(object):
         if not os.path.isdir(container):
             os.makedirs(container)
         proj.osf.session.download_file(asset['url'], full_path,
-                                       size=asset['size'], threaded=threaded)
+                                       size=asset['size'],
+                                       threaded=threaded, changes=self)
         logging.info("Sync.Changes request: File download: {}"
                      .format(new_path))
         return 1
@@ -120,7 +121,7 @@ class Changes(object):
             logging.info("Sync.Changes request: Create folder: {}"
                          .format(new_path))
         else:
-            proj.osf.add_file(asset, threaded=threaded)
+            proj.osf.add_file(asset, threaded=threaded, changes=self)
             logging.info("Sync.Changes request: File upload: {}"
                          .format(new_path))
         return 1
@@ -130,7 +131,7 @@ class Changes(object):
         full_path_new = os.path.join(proj.local.root_path, new_path)
         full_path_old = os.path.join(proj.local.root_path, asset['path'])
         shutil.move(full_path_old, full_path_new)
-        asset['path'] = new_path
+        self.rename_in_index(asset, new_path)
         logging.info("Sync.Changes done: Moved file locally: {} -> {}"
                      .format(asset['full_path'], new_path))
         return 1
@@ -138,7 +139,7 @@ class Changes(object):
     def apply_mv_remote(self, asset, new_path, threaded=False):
         proj = self.proj()
         new_folder, new_name = os.path.split(new_path)
-        proj.osf.rename_file(asset, new_path)
+        proj.osf.rename_file(asset, new_path, changes=self)
         logging.info("Sync.Changes request: Move file remote: {} -> {}"
                      .format(asset['path'], new_path))
         return 1
@@ -152,11 +153,12 @@ class Changes(object):
             os.rmdir(full_path)
         logging.info("Sync.Changes done: Removed file locally: {}"
                      .format(asset['path']))
+        self.remove_from_index(asset['path'])
         return 1
 
     def apply_del_remote(self, asset, new_path=None, threaded=False):
         proj = self.proj()
-        proj.osf.del_file(asset)
+        proj.osf.del_file(asset, changes=self)
         logging.info("Sync.Changes request: Remove file remotely: {}"
                      .format(asset['path']))
         return 1
@@ -167,19 +169,78 @@ class Changes(object):
         # remove previous copy of file
         if os.path.isfile(full_path):  # might have been removed already?
             os.remove(full_path)
+            self.remove_from_index(asset['path'])
         # then fetch new one from remote
         proj.osf.session.download_file(asset['url'], full_path,
-                                       size=asset['size'], threaded=threaded)
+                                       size=asset['size'],
+                                       threaded=threaded, changes=self)
         logging.info("Sync.Changes request: Update file locally: {}"
                      .format(asset['path']))
         return 1
 
     def apply_update_remote(self, asset, new_path=None, threaded=False):
         proj = self.proj()
-        proj.osf.add_file(asset, update=True, threaded=threaded)
+        proj.osf.add_file(asset, update=True,
+                          threaded=threaded, changes=self)
         logging.info("Sync.Changes request: Update file remotely: {}"
                      .format(new_path))
         return 1
+
+    def _asset_from_path(self, path):
+        """Try to find asset and return it
+        """
+        local_dict = dict_from_list(self.local_index, 'path')
+        last_dict = dict_from_list(self.last_index, 'path')
+        remote_dict = dict_from_list(self.remote_index, 'path')
+        if path in local_dict:
+            return local_dict[path]
+        elif path in last_dict:
+            return last_dict[path]
+        elif path in remote_dict:
+            return local_dict[path]
+        else:
+            return 0  # fail
+
+    def add_to_index(self, path):
+        """Tries to find the asset from the path to delete it
+
+        Path is ideally a local path (which acts as a key to the asset in
+        the local index) but if it's a URL we'll try to deduce the local path
+        """
+        asset = self._asset_from_path(path)
+        if asset:
+            self.last_index.append(asset)
+            return 1  # success
+        else:
+            logging.error("Was asked to add {} from index but "
+                          "it wasn't found. That could lead to corruption."
+                          .format(path))
+            return 0  # fail
+
+    def remove_from_index(self, path):
+        asset = self._asset_from_path(path)
+        if asset:
+            self.last_index.remove(asset)
+            return 1  # success
+        else:
+            logging.error("Was asked to remove {} from index but "
+                          "it wasn't found. That could lead to corruption."
+                          .format(path))
+            return 0  # fail
+
+
+    def rename_in_index(self, asset, new_path):
+        last_dict = dict_from_list(self.last_index, 'path')
+        if asset['path'] in last_dict:
+            new_asset = last_dict[asset['path']]
+            new_asset['path'] = new_path
+            return 1
+        else:
+            logging.error("Was asked to remove {} from index but "
+                          "it wasn't in index. That could lead to corruption."
+                          .format(asset['path']))
+            return 0
+
 
     def apply(self, threaded=False, dry_run=False):
         """Apply the changes using the given remote.Session object
@@ -244,7 +305,7 @@ class Changes(object):
         proj = self.proj()
         # when local/remote updates are complete refresh index based on local
         proj.local.rebuild_index()
-        proj.index = proj.local.index
+        # proj.index = proj.local.index
         self._set_empty()
         proj.save()
         if hasattr(logging, 'flush'):  # psychopy.logging has control of flush

@@ -103,7 +103,8 @@ class BufferReader(object):
 class PushPullThread(threading.Thread):
     def __init__(self, session, kind='push',
                  chunk_size=default_chunk_size,
-                 finished_callback=None):  # 65Kb
+                 finished_callback=None,
+                 changes=None):  # 65Kb
         threading.Thread.__init__(self)
         self.finished_callback = finished_callback
         self.asset_list = []
@@ -114,6 +115,10 @@ class PushPullThread(threading.Thread):
         self._finished_files_size = 0
         self.this_file_prog = 0
         self.kind = kind
+        if changes:
+            self.changes = weakref.ref(changes)  # a changes tracking object
+        else:
+            self.changes = None
 
     @property
     def finished_size(self):
@@ -149,9 +154,8 @@ class PushPullThread(threading.Thread):
         # do the upload
         file_buffer = BufferReader(asset['local_path'],
                                    self.chunk_size, self.info_callback)
-        time.sleep(0.01)
+        time.sleep(0.1)
         reply = session.put(asset['url'], data=file_buffer, timeout=30.0)
-        time.sleep(0.01)
         # check the upload worked (md5 checksum)
         with open(asset['local_path'], 'rb') as f:
             local_md5 = hashlib.md5(f.read()).hexdigest()
@@ -167,6 +171,8 @@ class PushPullThread(threading.Thread):
         self._finished_files_size += asset['size']
         logging.info("Async upload complete: {} to {}"
                      .format(asset['local_path'], asset['url']))
+        if self.changes:  # a weak ref to changes object. Update index
+            self.changes().add_to_index(asset['local_path'])  # signals success
 
     def download_file(self, asset, session):
         self.this_file_prog = 0
@@ -176,11 +182,13 @@ class PushPullThread(threading.Thread):
                 for chunk in reply.iter_content(self.chunk_size):
                     f.write(chunk)
                     self.this_file_prog += self.chunk_size
-                    time.sleep(0.0001)
+                    time.sleep(0.001)
         self.this_file_prog = 0
         self._finished_files_size += asset['size']
         logging.info("Async download complete: {} to {}"
                      .format(asset['local_path'], asset['url']))
+        if self.changes:  # a weak ref to changes object. Update index
+            self.changes().add_to_index(asset['local_path'])  # signals success
 
 
 class Session(requests.Session):
@@ -439,7 +447,7 @@ class Session(requests.Session):
             return 1
 
     def download_file(self, url, local_path,
-                      size=0, threaded=False):
+                      size=0, threaded=False, changes=None):
         """ Download a file with given object id
 
         Parameters
@@ -456,7 +464,8 @@ class Session(requests.Session):
                     self.downloader.status != NOT_STARTED:  # can't re-use
                 self.downloader = PushPullThread(
                     session=self, kind='pull',
-                    finished_callback=self.finished_downloads)
+                    finished_callback=self.finished_downloads,
+                    changes=changes)
             self.downloader.add_asset(url, local_path, size)
         else:
             # download immediately
@@ -465,9 +474,11 @@ class Session(requests.Session):
                 with open(local_path, 'wb') as f:
                     for chunk in reply.iter_content(self.chunk_size):
                         f.write(chunk)
+                if changes:
+                    changes.add_to_index(local_path)  # signals success
 
     def upload_file(self, url, update=False, local_path=None,
-                    size=0, threaded=False):
+                    size=0, threaded=False, changes=None):
         """Adds the file to the OSF project.
         If containing folder doesn't exist then it will be created recursively
 
@@ -479,7 +490,8 @@ class Session(requests.Session):
                     self.uploader.status != NOT_STARTED:  # can't re-use
                 self.uploader = PushPullThread(
                     session=self, kind='push',
-                    finished_callback=self.finished_uploads)
+                    finished_callback=self.finished_uploads,
+                    changes=changes)
             self.uploader.add_asset(url, local_path, size)
         else:
             with open(local_path, 'rb') as f:
@@ -496,6 +508,8 @@ class Session(requests.Session):
                     "Uploaded file did not match existing SHA. "
                     "Maybe it didn't fully upload?")
             logging.info("Uploaded (unthreaded): ".format(local_path))
+            if changes:
+                changes.add_to_index(local_path)  # signals success
             return node
 
     def finished_uploads(self):
@@ -947,7 +961,8 @@ class OSFProject(Node):
         """
         return find_by_key(self.index, 'path', path)
 
-    def add_file(self, asset, update=False, new_path=None, threaded=False):
+    def add_file(self, asset, update=False, new_path=None,
+                threaded=False, changes=None):
         """Adds the file to the OSF project.
         If containing folder doesn't exist then it will be created recursively
         update is used if the file already exists but needs updating (version
@@ -975,9 +990,9 @@ class OSFProject(Node):
         else:
             size = 0
         self.session.upload_file(url=url_upload, local_path=local_path,
-                                 size=size, threaded=threaded)
+                                 size=size, threaded=threaded, changes=changes)
 
-    def rename_file(self, asset, new_path):
+    def rename_file(self, asset, new_path, changes=None):
         # ensure the target location exists
         new_folder, new_name = os.path.split(new_path)
         # get the url and perform the move
@@ -992,8 +1007,10 @@ class OSFProject(Node):
             raise exceptions.HTTPSError(
                 "Failed remote file move URL:{}\nreply:{}"
                 .format(url_move, json.dumps(reply.json(), indent=2)))
+        if changes:
+            changes.rename_in_index(asset, new_path)
 
-    def del_file(self, asset):
+    def del_file(self, asset, changes=None):
         url_del = asset['links']['delete']
         reply = self.session.delete(url_del)
         if reply.status_code != 204:
@@ -1002,6 +1019,8 @@ class OSFProject(Node):
                 .format(url_del, json.dumps(reply.json(), indent=2)))
         if asset['path'] in self.containers:
             del self.containers[asset['path']]
+        if changes:
+            changes.remove_from_index(asset['path'])
 
 if __name__ == "__main__":
     import pytest
