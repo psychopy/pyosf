@@ -189,8 +189,8 @@ class Changes(object):
     def _asset_from_path(self, path):
         """Try to find asset and return it
         """
-        local_dict = dict_from_list(self.local_index, 'path')
-        last_dict = dict_from_list(self.last_index, 'path')
+        local_dict = dict_from_list(self.local_index, 'full_path')
+        last_dict = dict_from_list(self.last_index, 'full_path')
         remote_dict = dict_from_list(self.remote_index, 'path')
         if path in local_dict:
             return local_dict[path]
@@ -199,6 +199,8 @@ class Changes(object):
         elif path in remote_dict:
             return local_dict[path]
         else:
+            print("checking {}".format(path))
+            print(local_dict)
             return 0  # fail
 
     def add_to_index(self, path):
