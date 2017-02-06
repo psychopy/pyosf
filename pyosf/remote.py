@@ -903,7 +903,7 @@ class OSFProject(Node):
             entry['date_modified'] = modified
         self._index = file_list
 
-    def add_container(self, path, kind='folder'):
+    def add_container(self, path, kind='folder', changes=None):
         """Adds a container (currently only a folder) recursively.
 
         If the previous container was a folder or node it doesn't matter; they
@@ -953,6 +953,8 @@ class OSFProject(Node):
             asset = FileNode(self.session, reply_json).as_asset()
             logging.info("Created remote {} with path={}"
                          .format(asset['kind'], asset['path']))
+            if changes:
+                changes.add_to_index(asset['path'])
         self.containers[path] = asset
         return asset
 

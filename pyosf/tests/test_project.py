@@ -118,6 +118,7 @@ class TestProjectChanges():
               .format(t1-t0))
         print(changes)  # prints a prettified table
         print_all_changes(changes)
+        assert len(changes) == 0
 
     def test_save_load_proj(self):
 
@@ -168,27 +169,28 @@ class TestProjectChanges():
         container, name = os.path.split(test_path)
         asset = tools.find_by_key(self.proj.osf.index, 'path', container)
         self.proj.osf.del_file(asset)
+        do_sync(self.proj)
 
     def test_conflict(self):
-        fname = 'text_in_visual.txt'
+        filename = 'visual/text_in_visual.txt'
         # make changes to both and test sync
-        self._make_changes(self.proj, fname,
+        self._make_changes(self.proj, filename,
                            local_change=True, remote_change=True)
         print("Doing conflicted sync")
         do_sync(self.proj)
 
     def test_local_updated(self):
-        fname = 'lowerLevel.txt'
+        filename = 'lowerLevel.txt'
         # make changes to both and test sync
-        self._make_changes(self.proj, fname,
+        self._make_changes(self.proj, filename,
                            local_change=True, remote_change=False)
         print("Sync with a local update")
         do_sync(self.proj)
 
     def test_remote_updated(self):
-        fname = 'README.txt'
+        filename = 'README.txt'
         # make changes to both and test sync
-        self._make_changes(self.proj, fname,
+        self._make_changes(self.proj, filename,
                            local_change=False, remote_change=True)
         print("Sync with a remote update")
         do_sync(self.proj)
@@ -207,10 +209,22 @@ class TestProjectChanges():
         # create a conflict by changing a file in both locations
         last_index = proj.index
         # find a text file
-        for asset in last_index:
-            if asset['path'].endswith(filename):
+        asset = None
+        for thisAsset in last_index:
+            if thisAsset['path'].endswith(filename):
+                asset = thisAsset
                 break
-        path = asset['full_path']
+        
+        # found an asset
+        if not asset:
+            full_path = join(proj.root_path, filename)
+            path = filename
+        elif 'full_path' in asset:
+            full_path = asset['full_path']
+            path = asset['path']
+        else:
+            raise ValueError("full_path key not found in asset: {}".format(asset))
+            
         if constants.PY3:
             mode = 'at'
         else:
@@ -219,9 +233,9 @@ class TestProjectChanges():
         if remote_change:
             # modify it with no change to local date_modified
             # (create a copy, modify, upload and delete copy)
-            shutil.copy(path, 'tmp.txt')
+            shutil.copy(full_path, 'tmp.txt')
 
-            osf_asset = copy.copy(proj.osf.find_asset(asset['path']))
+            osf_asset = copy.copy(proj.osf.find_asset(path))
             osf_asset['full_path'] = 'tmp.txt'
             with open('tmp.txt', mode) as f:
                 f.write("A bit of text added remotely. ")
@@ -230,7 +244,7 @@ class TestProjectChanges():
 
         if local_change:
             # change again locally
-            with open(path, mode) as f:
+            with open(full_path, mode) as f:
                 f.write("A bit of text added locally. ")
 
 if __name__ == "__main__":

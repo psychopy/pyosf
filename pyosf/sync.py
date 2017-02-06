@@ -83,6 +83,25 @@ class Changes(object):
         for attrib_name in self._change_types:
             setattr(self, attrib_name, {})
 
+    def _make_dirs(self, path):
+        """Replaces os.makedirs by keeping tack of what folders we added
+        """
+        root = path
+        to_add = []
+        print("DoingMakeDirs for {}".format(path))
+        # find how low we have to go before valid path found
+        while not os.path.isdir(root):
+            root, needed = os.path.split(root)
+            to_add.insert(0, needed)  # insert at beginning to add first
+            if root=='' or needed=='':
+                break  # we got to either "/" or "path" 
+        # now create those folder rescursively from bottom
+        for this_folder in to_add:
+            root = os.path.join(root, this_folder)
+            os.mkdir(root)
+            self.add_to_index(root)  # update the index with this new folder
+            print("AddedFolder {}".format(root))
+        
     def apply_add_local(self, asset, new_path=None, threaded=False):
         proj = self.proj()
         full_path = os.path.join(proj.local.root_path, new_path)
@@ -90,9 +109,10 @@ class Changes(object):
         # handle folders
         if asset['kind'] == "folder":
             if os.path.isdir(full_path):
+                self.add_to_index(full_path)  # make sure its in index
                 return 1  # the folder may have been created implicitly already
             else:
-                os.makedirs(full_path)
+                self._make_dirs(full_path)
                 logging.info("Sync.Changes: created folder: {}"
                              .format(full_path))
                 return 1  # the folder may have been created implicitly already
@@ -100,7 +120,7 @@ class Changes(object):
         # this is a file
         container, filename = os.path.split(full_path)
         if not os.path.isdir(container):
-            os.makedirs(container)
+            self._make_dirs(container)
         proj.osf.session.download_file(asset['url'], full_path,
                                        size=asset['size'],
                                        threaded=threaded, changes=self)
@@ -117,7 +137,7 @@ class Changes(object):
             asset = copy.copy(asset)
             asset['path'] = new_path
         if asset['kind'] == 'folder':
-            proj.osf.add_container(asset['path'], kind='folder')
+            proj.osf.add_container(asset['path'], kind='folder', changes=self)
             logging.info("Sync.Changes request: Create folder: {}"
                          .format(new_path))
         else:
@@ -127,9 +147,16 @@ class Changes(object):
         return 1
 
     def apply_mv_local(self, asset, new_path, threaded=False):
+        if asset['kind'] == 'folder':
+            return 1
+            
         proj = self.proj()
         full_path_new = os.path.join(proj.local.root_path, new_path)
         full_path_old = os.path.join(proj.local.root_path, asset['path'])
+        # check if folder exists:
+        new_folder = os.path.split(full_path_new)[0]
+        if not os.path.isdir(new_folder):
+            self._make_dirs(new_folder)
         shutil.move(full_path_old, full_path_new)
         self.rename_in_index(asset, new_path)
         logging.info("Sync.Changes done: Moved file locally: {} -> {}"
@@ -189,18 +216,24 @@ class Changes(object):
     def _asset_from_path(self, path):
         """Try to find asset and return it
         """
-        local_dict = dict_from_list(self.local_index, 'full_path')
-        last_dict = dict_from_list(self.last_index, 'full_path')
+        root = self.proj().root_path
+        if path.startswith(root):
+            path = path.replace(root, '')
+            while path.startswith('/'):
+                path = path[1:]
+        path = path.replace(self.proj().root_path, '')
+        local_dict = dict_from_list(self.local_index, 'path')
+        last_dict = dict_from_list(self.last_index, 'path')
         remote_dict = dict_from_list(self.remote_index, 'path')
         if path in local_dict:
             return local_dict[path]
         elif path in last_dict:
             return last_dict[path]
         elif path in remote_dict:
-            return local_dict[path]
+            return remote_dict[path]
         else:
-            print("checking {}".format(path))
-            print(local_dict)
+            for ky in remote_dict.keys():
+                print('  - {}, '.format(ky, remote_dict[ky]['path']))
             return 0  # fail
 
     def add_to_index(self, path):
@@ -214,7 +247,7 @@ class Changes(object):
             self.last_index.append(asset)
             return 1  # success
         else:
-            logging.error("Was asked to add {} from index but "
+            logging.error("Was asked to add {} to index but "
                           "it wasn't found. That could lead to corruption."
                           .format(path))
             return 0  # fail
@@ -388,10 +421,11 @@ class Changes(object):
 
             elif path not in remote_p.keys() and path not in local_p.keys():
                 # code:100
-                # Was deleted in both. Forget about it
+                # Was deleted in both. Remove from index
                 logging.debug("Sync.analyze 100: {}"
                               "deleted locally and remotely"
                               .format(path))
+                self.remove_from_index(path)
 
             elif path not in local_p.keys():
                 remote_asset = remote_p[path]

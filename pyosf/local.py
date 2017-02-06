@@ -36,9 +36,9 @@ class LocalFiles(object):
         self._needs_rebuild_index = False
 
     def rebuild_index(self):
+        logging.info("Indexing LocalFiles")
         self._index = self._create_index()
         self._needs_rebuild_index = False
-        logging.info("Indexing LocalFiles")
 
     def _create_index(self, path=None):
         """Scans the tree of nodes recursively and returns
