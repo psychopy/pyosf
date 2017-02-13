@@ -152,10 +152,15 @@ class PushPullThread(threading.Thread):
     def upload_file(self, asset, session):
         self.currFileProgress = 0
         # do the upload
-        file_buffer = BufferReader(asset['local_path'],
-                                   self.chunk_size, self.info_callback)
         time.sleep(0.1)
-        reply = session.put(asset['url'], data=file_buffer, timeout=30.0)
+        if asset['size'] > 1000000:  # bigger than 1mb uses chunking
+            file_buffer = BufferReader(asset['local_path'],
+                                       self.chunk_size, self.info_callback)
+            reply = session.put(asset['url'], data=file_buffer, timeout=30.0)
+        else:
+            with open(local_path, 'rb') as file_buffer:
+                reply = session.put(asset['url'], data=file_buffer,
+                                    timeout=30.0)
         # check the upload worked (md5 checksum)
         with open(asset['local_path'], 'rb') as f:
             local_md5 = hashlib.md5(f.read()).hexdigest()
