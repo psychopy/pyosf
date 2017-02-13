@@ -158,7 +158,7 @@ class PushPullThread(threading.Thread):
                                        self.chunk_size, self.info_callback)
             reply = session.put(asset['url'], data=file_buffer, timeout=30.0)
         else:
-            with open(local_path, 'rb') as file_buffer:
+            with open(asset['local_path'], 'rb') as file_buffer:
                 reply = session.put(asset['url'], data=file_buffer,
                                     timeout=30.0)
         # check the upload worked (md5 checksum)
