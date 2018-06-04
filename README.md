@@ -48,10 +48,13 @@ osf_proj = session.open_project(proj_id)  # or this if you know the project id
 ```
 
 Then you can create a `Project` object to track the remote and local files. To do this you need:
-    - project_file: a location to store project info
-    - root_path:
-    - osf: an OSF project object from a `Session`
+
+    - `project_file`: a location to store project info
+    - `root_path`:
+    - `osf`: an OSF project object from a `Session`
+    
     OR
+    
     - simply a project file location, on subsequent repeats
 
 ```python
