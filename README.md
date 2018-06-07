@@ -55,16 +55,9 @@ for proj in projs:
 osf_proj = session.open_project(proj_id)  # or this if you know the project id
 ```
 
-If this is the first time working on this project, this is a good time to start
-with your `project_file`. To get it, you need to do:
+Then you can create a `Project` object to track the remote and local files. A
+`Project` consists of:
 
-```python
-	osf_proj.save('/Home/myUserName/pyosfProjects/first.proj') # use your own path
-
-```
-
-Then you can create a `Project` object to track the remote and local files. To
-do this you need:
 - `project_file`: your project info
 - `root_path`: the location where your osf project is permanently stored
   locally
@@ -75,14 +68,28 @@ do this you need:
 - simply a project file location, on subsequent repeats (provided you did not
   change the `root_path`.)
 
+If initially, you do not have a `project_file`, just specify the location where
+you want to save it later. `pyosf` will give you a warning that it did not find
+a `project_file`, which is ok because we are going to create it.
+
 ```python
+# Make a project object
 proj = pyosf.Project(project_file='/Home/myUserName/pyosfProjects/first.proj',
                      root_path='/Home/myUserName/experiments/firstExperiment',
                      osf=osf_proj)
-changes = proj.get_changes()  # get the diff between local and remote project
-print(changes)  # inspect the changes
-changes.apply()  # do the sync
-proj.save()
+
+# get the difference between local and remote project										 
+changes = proj.get_changes()  
+
+# inspect the changes
+print(changes)  
+
+# do the sync
+changes.apply()
+
+# If you did not have a project file initially, the following will create one
+# and save it under the path that you have given when calling `pyosf.Project`  
+proj.save()  
 ```
 
 The project file saves your username (but not password) and, if the username
