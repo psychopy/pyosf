@@ -32,7 +32,7 @@ setup(
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.3',
         'Programming Language :: Python :: 3.4',
-        'Programming Language :: Python :: 3.5',          
+        'Programming Language :: Python :: 3.5',
         'Operating System :: MacOS :: MacOS X',
         'Operating System :: Microsoft :: Windows',
         'Operating System :: POSIX',
@@ -40,6 +40,7 @@ setup(
     keywords='Open Science Framework PsychoPy',
     packages=find_packages(exclude=['docs', 'tests']),
     # $ pip install -e .[dev,test]
+    install_requires=['requests'],
     setup_requires=['pytest-runner', 'requests'],
     tests_require=['pytest', 'coverage', 'requests'],
     package_data={
